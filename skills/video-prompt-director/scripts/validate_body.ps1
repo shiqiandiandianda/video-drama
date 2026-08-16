@@ -2,7 +2,10 @@ param(
     [Parameter(Mandatory = $true)]
     [string]$BodyPath,
 
-    [int]$MaxChars = 0
+    [int]$MaxChars = 0,
+
+    [ValidateSet(0,15,30)]
+    [int]$ExpectedDurationSeconds = 0
 )
 
 $ErrorActionPreference = 'Stop'
@@ -69,10 +72,42 @@ foreach ($token in $mixedTokens) {
     }
 }
 
-$zeroTimelinePattern = '(?m)^\s*0(?:\.0+)?\s*(?:-|\u2013|\u2014|\u81F3|\u5230)\s*\d+(?:\.\d+)?\s*\u79D2\s*[\uFF1A:]'
-$zeroTimelineCount = [regex]::Matches($body, $zeroTimelinePattern).Count
+if ($mixedTokens.Count -eq 0) {
+    $issues.Add('MIXED_SLOT_REQUIRED')
+}
+else {
+    $mixedSlotNumbers = @($mixedTokens | ForEach-Object {
+        if ($_.Value -match '^\{\{Mixed ([1-9][0-9]*)\}\}$') { [int]$Matches[1] }
+    } | Where-Object { $null -ne $_ } | Sort-Object -Unique)
+    for ($slotIndex = 0; $slotIndex -lt $mixedSlotNumbers.Count; $slotIndex++) {
+        if ($mixedSlotNumbers[$slotIndex] -ne ($slotIndex + 1)) {
+            $issues.Add('MIXED_SLOTS_MUST_AUTO_INCREMENT_FROM_1')
+            break
+        }
+    }
+}
+
+$timelinePattern = '(?m)^\s*(\d+(?:\.\d+)?)\s*(?:-|\u2013|\u2014|\u81F3|\u5230)\s*(\d+(?:\.\d+)?)\s*\u79D2\s*[\uFF1A:]'
+$timelineMatches = [regex]::Matches($body, $timelinePattern)
+$zeroTimelineCount = @($timelineMatches | Where-Object { [double]::Parse($_.Groups[1].Value, [Globalization.CultureInfo]::InvariantCulture) -eq 0 }).Count
 if ($zeroTimelineCount -gt 1) {
     $issues.Add("MULTIPLE_ZERO_TIMELINES: $zeroTimelineCount")
+}
+if ($timelineMatches.Count -eq 0) {
+    $issues.Add('TIMELINE_REQUIRED')
+}
+else {
+    $expectedStart = 0.0
+    foreach ($timelineMatch in $timelineMatches) {
+        $segmentStart = [double]::Parse($timelineMatch.Groups[1].Value, [Globalization.CultureInfo]::InvariantCulture)
+        $segmentEnd = [double]::Parse($timelineMatch.Groups[2].Value, [Globalization.CultureInfo]::InvariantCulture)
+        if ($segmentStart -ne $expectedStart) { $issues.Add("TIMELINE_GAP_OR_OVERLAP: expected $expectedStart, found $segmentStart") }
+        if ($segmentEnd -le $segmentStart) { $issues.Add("TIMELINE_SEGMENT_INVALID: $segmentStart-$segmentEnd") }
+        $expectedStart = $segmentEnd
+    }
+    if ($ExpectedDurationSeconds -gt 0 -and $expectedStart -ne $ExpectedDurationSeconds) {
+        $issues.Add("TIMELINE_DURATION_MISMATCH: $expectedStart != $ExpectedDurationSeconds")
+    }
 }
 
 $result = [ordered]@{
@@ -80,7 +115,9 @@ $result = [ordered]@{
     body_path = (Resolve-Path -LiteralPath $BodyPath).Path
     unicode_code_points = $charCount
     max_chars = if ($MaxChars -gt 0) { $MaxChars } else { $null }
+    expected_duration_seconds = if ($ExpectedDurationSeconds -gt 0) { $ExpectedDurationSeconds } else { $null }
     zero_timeline_count = $zeroTimelineCount
+    timeline_segment_count = $timelineMatches.Count
     mixed_token_count = $mixedTokens.Count
     issues = @($issues)
 }

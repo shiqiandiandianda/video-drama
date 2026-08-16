@@ -78,6 +78,7 @@ try {
     $valid = [ordered]@{
         schema_version = "1.0"
         project_id = "PROJECT-TEST"
+        flow_authorization_id = "FLOW-AUTH-PROJECT-TEST-0001"
         artifact_id = "PLOT-E01"
         artifact_version = "V1"
         full_id = "PLOT-E01-V1"

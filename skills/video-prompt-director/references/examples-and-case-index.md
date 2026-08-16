@@ -17,7 +17,7 @@
 
 ## 2. 合同级合成示例
 
-假设上游已经明确：一条 6 秒固定中景，女主把通知书推到父亲面前并说一句短台词；分镜图已人工批准，右手和双人位置已锁定。
+假设上游已经明确：一条 Seedance 2.0 固定中景，女主把通知书推到父亲面前并说一句短台词；分镜图已人工批准，右手和双人位置已锁定。调用方没有提供任何人物、场景或道具资产，因此由 S05 自动规划槽位。
 
 ```yaml
 project_id: PRJ-DEMO
@@ -37,7 +37,7 @@ task:
   output_scope: SINGLE_SHOT
   delivery_mode: PROMPT_ONLY
   aspect_ratio: "9:16"
-  target_duration_seconds: 6
+  target_duration_seconds: 15
 approved_image_full_id: IMG-E01-S01-003-V2
 source_artifacts:
   - role: APPROVED_STORYBOARD
@@ -92,7 +92,7 @@ action_flow:
       camera_execution: 固定中景，不新增运动
       light_sound_change: 纸张摩擦桌面的轻声清楚
     - start_seconds: 2
-      end_seconds: 6
+      end_seconds: 15
       primary_event: 女主停手说出原台词，父亲听懂后呼吸停半拍
       action_physics: 女主指腹尚未完全离开封面，姿势保持稳定
       performance: 女主短吸气后开口；父亲不张嘴，下巴微收并抬眼看她
@@ -103,7 +103,7 @@ dialogue_audio:
     exact_text: "爸，这是我的录取通知书。"
     source_ref: SCRIPT-E01-V1:<示例范围>
     start_seconds: 2.4
-    end_seconds: 5.2
+    end_seconds: 6.0
     voice: 成年年轻女性，克制清楚，音量正常，语速自然，开口前短吸气
     listener_reactions:
       - 父亲闭嘴，先看通知书再抬眼看女主
@@ -120,15 +120,15 @@ camera:
   visible_depth_of_field: 双人、右手和通知书清楚，背景家具轻柔化但结构可辨
 end_state:
   state_kind: PLANNED
-  recommended_stable_frame_seconds: 5.8
+  recommended_stable_frame_seconds: 14.7
   next_shot_must_inherit:
     - 通知书平放在父亲正前方
     - 女主右手指腹尚未完全离开封面
     - 父亲尚未拿起通知书
 body_sections:
-  reference_materials: "参考图素材说明：女主{{Mixed 1}}，父亲{{Mixed 2}}，客厅{{Mixed 3}}，确认分镜图{{Mixed 7}}。"
-  approved_start_and_spatial_state: "参考确认分镜图{{Mixed 7}}中已批准的双人中景构图……"
-  continuous_timeline: "0-2秒：……\n2-6秒：……"
+  reference_materials: "参考图素材说明：女主{{Mixed 1}}，父亲{{Mixed 2}}，客厅{{Mixed 3}}，通知书{{Mixed 4}}，确认分镜图{{Mixed 5}}。"
+  approved_start_and_spatial_state: "参考确认分镜图{{Mixed 5}}中已批准的双人中景构图……"
+  continuous_timeline: "0-2秒：……\n2-6秒：……\n6-15秒：父亲消化信息、女主保持期待、呼吸与视线自然延续，最终回稳……"
   imaging: "50mm、f/4，摄影机距双人约2.4米……"
   sound_continuity_stability: "保留纸面摩擦、呼吸和室内环境声，不生成BGM……"
 body: <五个分区按固定顺序拼接后的完整正文>
@@ -136,6 +136,8 @@ body_char_count: <按契约计算>
 ```
 
 此示例只证明“一镜、来源、时间轴、右手、对白、光学和计划镜尾”的结构能对齐；没有真实上游文件和生成结果时不能作为 PASS 样本。
+
+对应 `reference_bindings` 的五项均使用从 1 连续自增的槽位；女主、父亲、客厅、通知书和确认分镜图分别标记为 `AUTO_PLANNED/REQUIRED_NOT_PROVIDED`，`asset_id/asset_version` 为 `null`。这不是伪造资产，而是明确调用方需要上传的五类输入。
 
 ## 3. 输入门禁失败
 
@@ -156,7 +158,7 @@ required_input:
 
 禁止输出“可执行暂定 Prompt”。
 
-Seedance 2.5 只有模型名和“全能参考/5000 字”时同样返回 `HUMAN_GATE`，要求完整 `VERIFIED` 规则配置。
+Seedance 2.5 的 `MULTIMODAL_REFERENCE/OMNI_REFERENCE` 可使用仓库内 `SD25-PROJECT-V1`，固定 30 秒；编辑、延长或组合任务仍要求额外 `VERIFIED` 配置。
 
 ## 4. 时长超载路由
 
@@ -193,10 +195,10 @@ required_decision: 由 S03 拆镜/调整时长并重新通过 QA 后，使旧图
 - 两张带红色镜号的黑白剧情联系表，合计 01–26 镜；
 - 后段包含录音计时、时间卡和中文字幕画面。
 
-它们没有结构化 `shot_id/prompt_id/image_version` 清单、人工批准状态、上游分镜表、原始对白或资产槽位，因此不能直接通过 S05 门禁。可用方式：
+它们没有结构化 `shot_id/prompt_id/image_version` 清单、人工批准状态、上游分镜表或原始对白，因此不能直接通过 S05 门禁。没有资产槽位本身不再是阻断原因；其他权威上游齐全时，S05 会自动规划槽位。可用方式：
 
 - 空白模板只用于外部审核拼版，不是视频参考资产。
-- 联系表可做视觉读取/连续性 smoke test，但必须由测试夹具显式标为“合成元数据”，不能伪称生产 APPROVED。
+- 联系表可做视觉读取/连续性 smoke test，但必须由测试夹具显式标为“合成元数据”，不能伪称生产 APPROVED；测试 Prompt 仍须含自动规划的 Mixed 槽位。
 - 红色镜号、白色边框、录音界面以外的拼版文字和水印默认不继承。
 - 时间/录音/字幕文字只有上游给出精确源文本并批准时才允许生成。
 

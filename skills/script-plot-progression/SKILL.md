@@ -9,6 +9,14 @@ description: 将原剧本、人物关系、场景事实和已确认导演决定�
 
 将已提供的剧本事实整理成可追踪、可检查、可供分镜设计直接使用的 `PlotProgressionSpec`。保持剧情事件、人物关系、发生顺序和原始对白忠实，不用镜头语言替代剧情结构。
 
+## 中央流程硬门禁
+
+本 Skill 只能由 S01 `$short-drama-flow-director` 的当前 `CALL_PRODUCER` 或 `ROUTE_REPAIR` 调度进入。开始任何剧情整理前，必须读取完整 S01 状态包并核对 `dispatch.authorization_id` 对应唯一 `ISSUED FlowAuthorization`，其 `project_id`、`stage: P1`、`action`、`target: script-plot-progression`、范围和 `ticket_id`（返修时）必须与本任务完全一致。
+
+把状态包保存为 UTF-8 JSON，先运行 `..\short-drama-flow-director\scripts\validate_flow_state.ps1 -Path <flow-state.json>`；脚本通过且当前 dispatch 精确指向本 Skill 后才能继续。
+
+缺失或不匹配时立即停止，只输出 `FLOW_DISPATCH_REQUIRED`、不匹配证据和 `return_to: short-drama-flow-director`；不得生成 Plot 草稿、正文片段或替代产物。合法产物根级必须原样写入 `flow_authorization_id`。
+
 ## 严守职责边界
 
 - 只生成或修复 `PlotProgressionSpec`。
@@ -197,6 +205,9 @@ approved_upstream:
 project_constraints: <项目锁定剧情与来源规则>
 change_set: <UPDATE 时提供；首次 CREATE 为 null>
 previous_version: <REPAIR/UPDATE 时提供；首次 CREATE 为 null>
+flow_control:
+  production_authorization_id: <本产物的 flow_authorization_id>
+  flow_state: <完整当前 S01 状态包，dispatch 为 CALL_QA>
 ```
 
 等待 QA 返回：

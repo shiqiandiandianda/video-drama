@@ -50,8 +50,9 @@ $base = [ordered]@{
     artifact_id = 'STORYBOARD-E01-S01'
     artifact_version = 'V1'
     full_id = 'STORYBOARD-E01-S01-V1'
+    flow_authorization_id = 'FLOW-AUTH-PRJ001-P2-0001'
     verdict = 'PASS'
-    checked_against = @('STORYBOARD-E01-S01-V1','PLOT-E01-V1')
+    checked_against = @('STORYBOARD-E01-S01-V1','PLOT-E01-V1','FLOW-AUTH-PRJ001-P2-0001')
     issues = @()
     repair_ticket = $null
     stale_downstream = @()
@@ -90,7 +91,7 @@ try {
     $plotRepair.qa_mode = 'PLOT'
     $plotRepair.artifact_id = 'PLOT-E01'
     $plotRepair.full_id = 'PLOT-E01-V1'
-    $plotRepair.checked_against = @('PLOT-E01-V1','SCRIPT-E01-V1')
+    $plotRepair.checked_against = @('PLOT-E01-V1','SCRIPT-E01-V1',$plotRepair.flow_authorization_id)
     $plotRepair.issues[0].rule_id = 'PLOT-DIALOGUE-001'
     $plotRepair.issues[0].issue_id = 'QI-PLOT-001'
     $plotRepair.issues[0].owner = 'script-plot-progression'
@@ -107,7 +108,7 @@ try {
     $promptRepair.qa_mode = 'STORYBOARD_PROMPT'
     $promptRepair.artifact_id = 'SP-E01-S01-005'
     $promptRepair.full_id = 'SP-E01-S01-005-V1'
-    $promptRepair.checked_against = @('SP-E01-S01-005-V1','STORYBOARD-E01-S01-V1')
+    $promptRepair.checked_against = @('SP-E01-S01-005-V1','STORYBOARD-E01-S01-V1',$promptRepair.flow_authorization_id)
     $promptRepair.issues[0].rule_id = 'SP-SPATIAL-001'
     $promptRepair.issues[0].issue_id = 'QI-STORYBOARD-PROMPT-001'
     $promptRepair.issues[0].owner = 'storyboard-image-prompt-director'
@@ -123,7 +124,7 @@ try {
     $imageRepair.qa_mode = 'STORYBOARD_IMAGE'
     $imageRepair.artifact_id = 'IMG-E01-S01-005'
     $imageRepair.full_id = 'IMG-E01-S01-005-V1'
-    $imageRepair.checked_against = @('IMG-E01-S01-005-V1','SP-E01-S01-005-V1')
+    $imageRepair.checked_against = @('IMG-E01-S01-005-V1','SP-E01-S01-005-V1',$imageRepair.flow_authorization_id)
     $imageRepair.issues[0].rule_id = 'IMG-SPATIAL-001'
     $imageRepair.issues[0].issue_id = 'QI-STORYBOARD-IMAGE-001'
     $imageRepair.issues[0].owner = 'storyboard-image-generation'
@@ -139,7 +140,7 @@ try {
     $videoRepair.qa_mode = 'VIDEO_PROMPT'
     $videoRepair.artifact_id = 'VP-E01-S01-005'
     $videoRepair.full_id = 'VP-E01-S01-005-V1'
-    $videoRepair.checked_against = @('VP-E01-S01-005-V1','IMG-E01-S01-005-V1')
+    $videoRepair.checked_against = @('VP-E01-S01-005-V1','IMG-E01-S01-005-V1',$videoRepair.flow_authorization_id)
     $videoRepair.issues[0].rule_id = 'VP-START-001'
     $videoRepair.issues[0].issue_id = 'QI-VIDEO-PROMPT-001'
     $videoRepair.issues[0].owner = 'video-prompt-director'
@@ -151,6 +152,16 @@ try {
     $videoRepair.repair_ticket | Add-Member -NotePropertyName affected_scope -NotePropertyValue @('SHOT-E01-S01-005')
     $videoRepair.repair_ticket | Add-Member -NotePropertyName allowed_changes -NotePropertyValue @('/start_state/characters')
     Run-Case 'valid-video-prompt-repair' $videoRepair 0
+
+    $positionRepair = $videoRepair | ConvertTo-Json -Depth 30 | ConvertFrom-Json
+    $positionRepair.issues[0].rule_id = 'VP-POSITION-001'
+    $positionRepair.issues[0].issue_type = 'CHARACTER_POSITION_RELATION_MISSING'
+    $positionRepair.issues[0].artifact_path = '/start_state/characters'
+    $positionRepair.issues[0].message = 'Visible character position relations are missing from the prompt.'
+    $positionRepair.repair_ticket.issue_type = 'CHARACTER_POSITION_RELATION_MISSING'
+    $positionRepair.repair_ticket.repair_instruction = 'Add explicit structured and body-mirrored character position relations.'
+    $positionRepair.repair_ticket.allowed_changes = @('/start_state/characters','/action_flow/timeline/*/spatial_execution','/end_state/characters','/body_sections/approved_start_and_spatial_state','/body')
+    Run-Case 'valid-character-position-repair' $positionRepair 0
 
     $badPass = $base | ConvertTo-Json -Depth 30 | ConvertFrom-Json
     $badPass.issues = @(New-Issue)
@@ -172,6 +183,14 @@ try {
     $human.verdict = 'HUMAN_GATE'
     $human.issues = @(New-Issue -Repairable $false)
     Run-Case 'valid-human-gate' $human 0
+
+    $flowHuman = $base | ConvertTo-Json -Depth 30 | ConvertFrom-Json
+    $flowHuman.verdict = 'HUMAN_GATE'
+    $flowHuman.issues = @(New-Issue -Repairable $false)
+    $flowHuman.issues[0].rule_id = 'FLOW-AUTH-001'
+    $flowHuman.issues[0].issue_type = 'FLOW_AUTHORIZATION_INVALID'
+    $flowHuman.issues[0].owner = 'short-drama-flow-director'
+    Run-Case 'valid-flow-authorization-human-gate' $flowHuman 0
 }
 finally {
     if (Test-Path -LiteralPath $tempRoot) {

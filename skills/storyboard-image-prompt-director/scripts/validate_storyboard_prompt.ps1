@@ -25,10 +25,11 @@ if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) { Write-Error "Storyboar
 try { $artifact = Get-Content -Raw -Encoding UTF8 -LiteralPath $Path | ConvertFrom-Json }
 catch { Write-Error "Invalid JSON: $($_.Exception.Message)"; exit 2 }
 
-$required = @('schema_version','project_id','scene_id','shot_id','source_beat_ids','artifact_id','artifact_version','full_id','prompt_id','source_artifact_id','source_version','source_full_id','source_status','source_stale','storyboard_row_version','source_row_full_id','source_row_status','source_row_stale','status','frame_role','selected_moment','positive_prompt','asset_requirements','asset_bindings','camera','spatial_continuity','prop_states','text_policy','locked_fields','negative_constraints','aspect_ratio','unresolved_fields','change_log')
+$required = @('schema_version','project_id','flow_authorization_id','scene_id','shot_id','source_beat_ids','artifact_id','artifact_version','full_id','prompt_id','source_artifact_id','source_version','source_full_id','source_status','source_stale','storyboard_row_version','source_row_full_id','source_row_status','source_row_stale','status','frame_role','selected_moment','positive_prompt','asset_requirements','asset_bindings','camera','spatial_continuity','prop_states','text_policy','locked_fields','negative_constraints','aspect_ratio','unresolved_fields','change_log')
 foreach ($field in $required) { Require-Property $artifact $field 'root' | Out-Null }
 
 if ((Has-Property $artifact 'schema_version') -and $artifact.schema_version -ne '1.0') { $errors.Add('root.schema_version must be 1.0.') }
+if ((Has-Property $artifact 'flow_authorization_id') -and $artifact.flow_authorization_id -notmatch '^FLOW-AUTH-[A-Z0-9][A-Z0-9-]*-[0-9]{4}$') { $errors.Add('root.flow_authorization_id is invalid. Production must be dispatched by S01.') }
 if ((Has-Property $artifact 'scene_id') -and $artifact.scene_id -notmatch '^SCENE-E[0-9]{2,4}-S[0-9]{2,4}$') { $errors.Add('root.scene_id is invalid.') }
 if ((Has-Property $artifact 'shot_id') -and $artifact.shot_id -notmatch '^SHOT-E[0-9]{2,4}-S[0-9]{2,4}-[0-9]{3}$') { $errors.Add('root.shot_id is invalid.') }
 if ((Has-Property $artifact 'scene_id') -and (Has-Property $artifact 'shot_id')) {

@@ -48,6 +48,14 @@ function Scope-Values($Scope, [string]$Name) {
     if ($null -eq $Scope -or -not (Has-Property $Scope $Name)) { return @() }
     return @($Scope.$Name)
 }
+function Get-ScopeKey($Scope) {
+    if ($null -eq $Scope) { return $null }
+    $parts = foreach ($name in @('episode_ids','scene_ids','shot_ids','beat_ids')) {
+        $values = @(Scope-Values $Scope $name | ForEach-Object { [string]$_ } | Sort-Object -Unique)
+        $name + '=' + ($values -join ',')
+    }
+    return $parts -join ';'
+}
 function Get-ArtifactEpisodeId($Artifact) {
     $candidates = @()
     foreach ($name in @('artifact_id','scene_id','shot_id')) {
@@ -153,7 +161,7 @@ foreach ($property in @('project_manifest','stage_state','dispatch')) {
         Add-Error "$.${property} must be an object."
     }
 }
-foreach ($property in @('decision_ledger','artifact_index','pending_repair_tickets','run_log','delivery')) {
+foreach ($property in @('decision_ledger','artifact_index','flow_authorizations','pending_repair_tickets','run_log','delivery')) {
     Require-Array $bundle $property '$' | Out-Null
 }
 
@@ -167,6 +175,7 @@ $stage = $bundle.stage_state
 $dispatch = $bundle.dispatch
 $script:sources = @($manifest.source_materials)
 $script:artifacts = @($bundle.artifact_index)
+$script:authorizations = @($bundle.flow_authorizations)
 $script:hasConflict = $false
 
 Require-String $manifest 'project_id' '$.project_manifest' | Out-Null
@@ -230,6 +239,9 @@ for ($i = 0; $i -lt $script:artifacts.Count; $i++) {
     $artifact = $script:artifacts[$i]
     $artifactPath = "$.artifact_index[$i]"
     foreach ($name in @('project_id','artifact_type','artifact_id','artifact_version','full_id','status','resource')) { Require-String $artifact $name $artifactPath | Out-Null }
+    if ((Has-Property $artifact 'artifact_type') -and $artifact.artifact_type -in @('PLOT','STORYBOARD_TABLE','STORYBOARD_PROMPT','STORYBOARD_IMAGE','VIDEO_PROMPT')) {
+        Require-String $artifact 'flow_authorization_id' $artifactPath | Out-Null
+    }
     foreach ($name in @('current','stale')) {
         if (Require-Property $artifact $name $artifactPath) {
             if ($artifact.$name -isnot [bool]) { Add-Error "$artifactPath.$name must be boolean." }
@@ -269,6 +281,28 @@ for ($i = 0; $i -lt $script:artifacts.Count; $i++) {
     }
 }
 
+$authorizationIds = @{}
+for ($i = 0; $i -lt $script:authorizations.Count; $i++) {
+    $authorization = $script:authorizations[$i]
+    $authorizationPath = "$.flow_authorizations[$i]"
+    foreach ($name in @('authorization_id','project_id','stage','action','target','status','issued_at')) { Require-String $authorization $name $authorizationPath | Out-Null }
+    foreach ($name in @('scope','artifact_full_id','ticket_id')) { Require-Property $authorization $name $authorizationPath | Out-Null }
+    if ((Has-Property $authorization 'authorization_id') -and $authorization.authorization_id -notmatch '^FLOW-AUTH-[A-Z0-9][A-Z0-9-]*-[0-9]{4}$') { Add-Error "$authorizationPath.authorization_id is invalid." }
+    if ((Has-Property $authorization 'authorization_id')) {
+        if ($authorizationIds.ContainsKey($authorization.authorization_id)) { Add-Error "Duplicate authorization_id: $($authorization.authorization_id)." }
+        else { $authorizationIds[$authorization.authorization_id] = $true }
+    }
+    if ((Has-Property $authorization 'project_id') -and $authorization.project_id -ne $manifest.project_id) { Add-Error "$authorizationPath.project_id must match project_manifest.project_id." }
+    if ((Has-Property $authorization 'stage') -and $authorization.stage -notin @('P1','P2','P3','P4','P6')) { Add-Error "$authorizationPath.stage is invalid." }
+    if ((Has-Property $authorization 'action') -and $authorization.action -notin @('CALL_PRODUCER','ROUTE_REPAIR')) { Add-Error "$authorizationPath.action is invalid." }
+    if ((Has-Property $authorization 'status') -and $authorization.status -notin @('ISSUED','CONSUMED','REVOKED')) { Add-Error "$authorizationPath.status is invalid." }
+    if ((Has-Property $authorization 'scope') -and $null -ne $authorization.scope) {
+        foreach ($name in @('episode_ids','scene_ids','shot_ids','beat_ids')) { Require-Array $authorization.scope $name "$authorizationPath.scope" | Out-Null }
+    }
+    if ((Has-Property $authorization 'status') -and $authorization.status -eq 'ISSUED' -and (Has-Property $authorization 'artifact_full_id') -and $null -ne $authorization.artifact_full_id) { Add-Error "$authorizationPath.artifact_full_id must be null while status is ISSUED." }
+    if ((Has-Property $authorization 'status') -and $authorization.status -eq 'CONSUMED' -and ((-not (Has-Property $authorization 'artifact_full_id')) -or [string]::IsNullOrWhiteSpace([string]$authorization.artifact_full_id))) { Add-Error "$authorizationPath.artifact_full_id is required while status is CONSUMED." }
+}
+
 if (Has-Property $stage 'current_artifact_full_id') {
     $currentFullId = $stage.current_artifact_full_id
     if ($null -ne $currentFullId) {
@@ -290,6 +324,7 @@ Require-Property $dispatch 'target' '$.dispatch' | Out-Null
 Require-Property $dispatch 'qa_mode' '$.dispatch' | Out-Null
 Require-Property $dispatch 'artifact_full_id' '$.dispatch' | Out-Null
 Require-Property $dispatch 'ticket_id' '$.dispatch' | Out-Null
+Require-Property $dispatch 'authorization_id' '$.dispatch' | Out-Null
 Require-Property $dispatch 'scope' '$.dispatch' | Out-Null
 Require-Property $dispatch 'reason' '$.dispatch' | Out-Null
 $actions = @('CALL_PRODUCER','CALL_QA','ROUTE_REPAIR','REQUEST_HUMAN_APPROVAL','MARK_STALE','DELIVER','BLOCK','NONE')
@@ -317,6 +352,15 @@ if ((Has-Property $dispatch 'action') -and $dispatch.action -eq 'CALL_PRODUCER')
     if (-not $producerTargets.ContainsKey($stage.current_stage)) { Add-Error "No producer may be called at $($stage.current_stage)." }
     elseif ($dispatch.target -ne $producerTargets[$stage.current_stage]) { Add-Error "CALL_PRODUCER target must be $($producerTargets[$stage.current_stage]) at $($stage.current_stage)." }
     if (-not (Has-GateForStage $stage.current_stage $dispatch.scope)) { Add-Error "The authoritative upstream gate for $($stage.current_stage) is not satisfied." }
+    if ([string]::IsNullOrWhiteSpace([string]$dispatch.authorization_id)) { Add-Error 'CALL_PRODUCER requires authorization_id.' }
+    else {
+        $matches = @($script:authorizations | Where-Object { $_.authorization_id -eq $dispatch.authorization_id })
+        if ($matches.Count -ne 1) { Add-Error 'CALL_PRODUCER authorization_id must resolve to one authorization.' }
+        else {
+            $auth = $matches[0]
+            if ($auth.project_id -ne $manifest.project_id -or $auth.stage -ne $stage.current_stage -or $auth.action -ne 'CALL_PRODUCER' -or $auth.target -ne $dispatch.target -or $auth.status -ne 'ISSUED' -or (Get-ScopeKey $auth.scope) -ne (Get-ScopeKey $dispatch.scope)) { Add-Error 'CALL_PRODUCER authorization must be ISSUED and exactly match project, stage, action, target, and scope.' }
+        }
+    }
 }
 elseif ((Has-Property $dispatch 'action') -and $dispatch.action -eq 'CALL_QA') {
     if (-not $qaModes.ContainsKey($stage.current_stage)) { Add-Error "QA may not be called at $($stage.current_stage)." }
@@ -330,6 +374,17 @@ elseif ((Has-Property $dispatch 'action') -and $dispatch.action -eq 'CALL_QA') {
             if ($matches.Count -ne 1) { Add-Error 'CALL_QA artifact must be the unique current, non-stale DRAFT/CHECKING artifact of the stage type.' }
         }
         if (-not (Has-GateForStage $stage.current_stage $dispatch.scope)) { Add-Error "The QA upstream gate for $($stage.current_stage) is not satisfied." }
+        if ([string]::IsNullOrWhiteSpace([string]$dispatch.authorization_id)) { Add-Error 'CALL_QA requires the consumed production authorization_id.' }
+        else {
+            $authorizations = @($script:authorizations | Where-Object { $_.authorization_id -eq $dispatch.authorization_id })
+            if ($authorizations.Count -ne 1) { Add-Error 'CALL_QA authorization_id must resolve to one authorization.' }
+            else {
+                $auth = $authorizations[0]
+                if ($auth.project_id -ne $manifest.project_id -or $auth.stage -ne $stage.current_stage -or $auth.target -ne $producerTargets[$stage.current_stage] -or $auth.status -ne 'CONSUMED' -or $auth.artifact_full_id -ne $dispatch.artifact_full_id -or (Get-ScopeKey $auth.scope) -ne (Get-ScopeKey $dispatch.scope)) { Add-Error 'CALL_QA must reference the matching CONSUMED production authorization.' }
+                $indexed = @($script:artifacts | Where-Object { $_.full_id -eq $dispatch.artifact_full_id -and (Has-Property $_ 'flow_authorization_id') -and $_.flow_authorization_id -eq $dispatch.authorization_id })
+                if ($indexed.Count -ne 1) { Add-Error 'CALL_QA artifact must carry the same flow_authorization_id.' }
+            }
+        }
     }
 }
 elseif ((Has-Property $dispatch 'action') -and $dispatch.action -eq 'REQUEST_HUMAN_APPROVAL') {
@@ -349,6 +404,15 @@ elseif ((Has-Property $dispatch 'action') -and $dispatch.action -eq 'ROUTE_REPAI
             if ($ticket.full_id -ne $stage.current_artifact_full_id) { Add-Error 'RepairTicket.full_id must equal stage_state.current_artifact_full_id.' }
             if ([int]$ticket.max_attempts_remaining -lt 1) { Add-Error 'RepairTicket.max_attempts_remaining must be at least 1.' }
             if (@($ticket.locked_fields).Count -eq 0) { Add-Error 'RepairTicket.locked_fields must be non-empty.' }
+            if ([string]::IsNullOrWhiteSpace([string]$dispatch.authorization_id)) { Add-Error 'ROUTE_REPAIR requires authorization_id.' }
+            else {
+                $matches = @($script:authorizations | Where-Object { $_.authorization_id -eq $dispatch.authorization_id })
+                if ($matches.Count -ne 1) { Add-Error 'ROUTE_REPAIR authorization_id must resolve to one authorization.' }
+                else {
+                    $auth = $matches[0]
+                    if ($auth.project_id -ne $manifest.project_id -or $auth.stage -ne $stage.current_stage -or $auth.action -ne 'ROUTE_REPAIR' -or $auth.target -ne $dispatch.target -or $auth.status -ne 'ISSUED' -or $auth.ticket_id -ne $dispatch.ticket_id -or (Get-ScopeKey $auth.scope) -ne (Get-ScopeKey $dispatch.scope)) { Add-Error 'ROUTE_REPAIR authorization must be ISSUED and exactly match project, stage, target, ticket, and scope.' }
+                }
+            }
         }
     }
 }

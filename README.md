@@ -97,30 +97,34 @@ Copy-Item -Recurse -Force .\skills\* "$env:USERPROFILE\.codex\skills\"
 
 ## 使用方式
 
-推荐从 S01 流程导演启动整条流水线，例如：
+必须从 S01 流程导演启动或继续整条流水线，例如：
 
 ```text
 启动一个新的 AI 短剧项目。先登记剧本和项目约束，再告诉我当前阶段、缺少的输入以及下一步合法动作。
 ```
 
-也可以在已有权威上游产物时调用单个阶段：
+即使已有权威上游产物，也要交给 S01 判断阶段并签发一次性派工授权：
 
 ```text
-根据这个已通过 QA 的 PlotProgressionSpec 生成 S03 九列分镜表。
+把这个已通过 QA 的 PlotProgressionSpec 登记到当前项目，并由 S01 推进到下一合法阶段。
 ```
 
 ```text
-对这份 VideoPromptSpec 执行 QA:VIDEO_PROMPT，并在失败时输出最小范围 RepairTicket。
+把这份 VideoPromptSpec 登记到当前 S01 状态；只有派工授权和产物来源匹配时，调用 QA:VIDEO_PROMPT。
 ```
 
-使用单个生产 skill 时仍需满足它的输入门禁。缺少权威上游、版本不一致、来源已过期或人工确认未完成时，skill 会停止生产并返回门禁原因。
+禁止绕过 S01 单独调用生产或 QA skill 直接产出。S01 为每次生产签发 `FlowAuthorization`；S02-S05 没有匹配授权时只返回 `FLOW_DISPATCH_REQUIRED`。S06 会再次核验完整 S01 状态、当前 `CALL_QA`、产物 `flow_authorization_id` 和已消费授权，任何不一致都不能放行。
 
 ## 关键约束
 
 - 上游事实优先，禁止无依据扩写剧情或改写原始对白。
 - 每个产物都携带可追踪的来源 ID、版本和状态。
+- 每个生产产物都携带可追踪的 S01 `flow_authorization_id`，且授权不得跨阶段、范围或版本复用。
 - QA 与生产职责分离；S06 只审查和路由，不直接修改生产产物。
 - 分镜图必须经过人工 `APPROVED`，S05 才能生成最终视频提示词。
+- 视频提示词必须逐人明确屏幕横向、景深层、世界锚点、朝向/视线和人物间位置关系；缺失或只写“保持站位”时 S06 必须要求返修。
+- S05 即使未收到资产也会自动规划从 `{{Mixed 1}}` 连续自增的素材槽位；Seedance 2.0 固定 15 秒，Seedance 2.5 固定 30 秒。
+- 批量视频 Prompt 必须同时通过单段时间轴校验和相邻镜头双向衔接校验。
 - 上游发生局部变化时，只将受影响的下游产物标记为 `STALE`。
 - 返修必须遵守锁定字段与最小修改范围。
 
@@ -136,6 +140,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\skills\tests\test_pipe
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\skills\tests\test_flow_director.ps1
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\skills\script-plot-progression\scripts\test_skill_scripts.ps1
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\skills\short-drama-unified-qa\scripts\test_qa_response_validator.ps1
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\skills\video-prompt-director\scripts\test_video_prompt_validators.ps1
 ```
 
 全部脚本返回退出码 `0` 才表示校验通过。测试输出中部分 `[ERROR]` 是刻意构造的失败用例；应以最终的测试结论和进程退出码为准。

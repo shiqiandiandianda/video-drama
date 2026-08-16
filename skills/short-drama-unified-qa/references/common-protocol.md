@@ -10,10 +10,12 @@
 
 ## 1. 请求门禁
 
-正式请求必须包含 `qa_mode`、完整 `artifact`、数组 `approved_upstream`、对象 `project_constraints`、`change_set` 和 `previous_version`。只给 ID、摘要、截图说明或下游转述都不足以裁决来源忠实度。
+正式请求必须包含 `qa_mode`、完整 `artifact`、数组 `approved_upstream`、对象 `project_constraints`、`change_set`、`previous_version` 和 `flow_control`。`flow_control` 必须携带 `production_authorization_id` 与完整当前 S01 状态包。只给 ID、摘要、截图说明、下游转述或单独工作 Skill 的产物都不足以裁决来源忠实度。
 
 检查时把以下对象视为不可放行：
 
+- 当前 S01 `dispatch` 不是指向 S06 的 `CALL_QA`，或模式、产物、范围不一致；
+- 产物缺少 `flow_authorization_id`，或对应授权不是唯一、`CONSUMED`、与生产目标和 `artifact_full_id` 精确一致；
 - 待检产物或直接上游为 `STALE`；
 - 权威上游仍为 `DRAFT`、`CHECKING`、`REPAIR` 或 `HUMAN_GATE`；
 - `VIDEO_PROMPT` 的目标分镜图未人工 `APPROVED`，或父集合虽 `APPROVED` 但目标条目不是当前精确版本、`stale: false`；
@@ -21,6 +23,8 @@
 - 返修/更新没有上一完整版本或精确授权范围。
 
 PLOT 的原剧本、确认决定和资产事实不是生产产物，可以没有 `PASS`，但必须带稳定来源、版本、确认状态和可定位内容。
+
+流程授权失败统一使用规则 `FLOW-AUTH-001`，裁决 `HUMAN_GATE` 并返回 S01。QA 不为绕过流程的产物补签授权，也不继续执行模式语义检查。
 
 ## 2. Issue 契约
 
@@ -101,17 +105,19 @@ qa_mode: STORYBOARD_TABLE
 artifact_id: STORYBOARD-E01-S01
 artifact_version: V1
 full_id: STORYBOARD-E01-S01-V1
+flow_authorization_id: FLOW-AUTH-PRJ001-P2-0001
 verdict: REPAIR
 checked_against:
   - PLOT-E01-V1
   - STORYBOARD-E01-S01-V1
+  - FLOW-AUTH-PRJ001-P2-0001
 issues: [<Issue>]
 repair_ticket: <RepairTicket、RepairTicket 数组或 null>
 stale_downstream: []
 checked_at: 2026-08-16T12:00:00+08:00
 ```
 
-`checked_against` 列出待检版本及所有实际参与裁决的精确权威版本。没有稳定 ID 的源剧本使用其来源 ID 和版本；不得只写类型名。
+`checked_against` 列出待检版本、实际参与裁决的精确权威版本和已核验的 `flow_authorization_id`。没有稳定 ID 的源剧本使用其来源 ID 和版本；不得只写类型名。
 
 `stale_downstream` 只报告因上游错误或版本变化需要失效的最小选择器，例如：
 

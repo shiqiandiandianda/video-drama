@@ -9,6 +9,14 @@ description: 将已通过 QA 的 PlotProgressionSpec 转换为导演和制作人
 
 把已通过的连续剧情 BEAT 转成足够且克制、可拍摄、可追踪的导演分镜。公开正文固定使用九列横向表，一镜一行；把内部 ID、版本、状态和 BEAT 映射放在表外 sidecar。
 
+## 中央流程硬门禁
+
+本 Skill 只能由 S01 `$short-drama-flow-director` 的当前 `CALL_PRODUCER` 或 `ROUTE_REPAIR` 调度进入。开始拆镜前，必须读取完整 S01 状态包并核对 `dispatch.authorization_id` 对应唯一 `ISSUED FlowAuthorization`，其 `project_id`、`stage: P2`、`action`、`target: storyboard-table-director`、范围和 `ticket_id`（返修时）必须与本任务完全一致。
+
+把状态包保存为 UTF-8 JSON，先运行 `..\short-drama-flow-director\scripts\validate_flow_state.ps1 -Path <flow-state.json>`；脚本通过且当前 dispatch 精确指向本 Skill 后才能继续。
+
+缺失或不匹配时立即停止，只输出 `FLOW_DISPATCH_REQUIRED`、不匹配证据和 `return_to: short-drama-flow-director`；不得生成分镜表、分镜行或局部内容。合法产物根级必须原样写入 `flow_authorization_id`。
+
 ## 读取规则
 
 正常生成前，读取：
@@ -109,7 +117,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File "<SKILL_DIR>\scripts\validat
 3. 固定九列的人类可读横向表；
 4. 表外规范 `shot_map`，每项同时保存九列正文、唯一 `shot_id`、独立 `storyboard_row_version` 和一个或多个 `source_beat_ids`；
 5. 总镜数、总时长、场次数和待人工判断项；
-6. 完整的统一 QA 请求：`qa_mode`、当前 `artifact`、`approved_upstream`、`project_constraints`、`change_set` 和 `previous_version`。
+6. 完整的统一 QA 请求：`qa_mode`、当前 `artifact`、`approved_upstream`、`project_constraints`、`change_set`、`previous_version` 和 `flow_control`；后者包含本产物的 `production_authorization_id` 与当前 S01 `CALL_QA` 状态包。
 
 当用户明确只要表格正文时，只展示第 3 项，但内部仍完成门禁、连续性、映射和 QA 自检。
 

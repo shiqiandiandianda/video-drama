@@ -18,6 +18,7 @@
 | 图像多生漏生、错脸错手、畸变、画面不符 Prompt | `storyboard-image-generation` | 图片生成阶段 |
 | 视频时间轴、动作物理、对白音频、Seedance 正文 | `video-prompt-director` | S05 |
 | 两个权威来源冲突、人工审美或授权范围不明 | 无自动路由 | `HUMAN_GATE` |
+| 缺少、伪造、未消费或不匹配的 S01 流程授权 | `short-drama-flow-director` | `FLOW-AUTH-001`，`HUMAN_GATE`，禁止内容返修 |
 
 下游检查发现上游设计错误时，路由真正所有者。不要让 S04 改分镜、让 S05 改确认图片，或让图片重生成掩盖错误 Prompt。
 

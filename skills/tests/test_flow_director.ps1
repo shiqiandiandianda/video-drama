@@ -20,6 +20,7 @@ function New-Artifact(
 ) {
     return [ordered]@{
         project_id='PRJ-001'; artifact_type=$Type; artifact_id=$Id; artifact_version=$Version; full_id=($Id + '-' + $Version)
+        flow_authorization_id='FLOW-AUTH-PRJ001-HISTORY-0001'
         status=$Status; current=$true; stale=($Status -eq 'STALE'); scene_id=$SceneId; shot_id=$ShotId
         source_beat_ids=@(); source_full_ids=@(); resource=('outputs/' + $Id.ToLowerInvariant() + '.json')
     }
@@ -37,6 +38,25 @@ function New-Bundle(
     [array]$Tickets = @(),
     [string]$TicketId = $null
 ) {
+    $scope = [ordered]@{ episode_ids=@('E01'); scene_ids=@(); shot_ids=$ShotIds; beat_ids=@() }
+    $authorizationId = $null
+    $authorizations = @()
+    $producerTargets = @{ P1='script-plot-progression'; P2='storyboard-table-director'; P3='storyboard-image-prompt-director'; P4='storyboard-image-generation'; P6='video-prompt-director' }
+    if ($Action -in @('CALL_PRODUCER','CALL_QA','ROUTE_REPAIR')) {
+        $authorizationId = "FLOW-AUTH-PRJ001-$Stage-0001"
+        $authorizationAction = if ($Action -eq 'ROUTE_REPAIR') { 'ROUTE_REPAIR' } else { 'CALL_PRODUCER' }
+        $authorizationTarget = if ($Action -eq 'CALL_QA') { $producerTargets[$Stage] } else { $Target }
+        $authorizationStatus = if ($Action -eq 'CALL_QA') { 'CONSUMED' } else { 'ISSUED' }
+        $authorizationArtifact = if ($Action -eq 'CALL_QA') { $ArtifactFullId } else { $null }
+        $authorizationTicket = if ($Action -eq 'ROUTE_REPAIR') { $TicketId } else { $null }
+        $authorizations = @([ordered]@{
+            authorization_id=$authorizationId; project_id='PRJ-001'; stage=$Stage; action=$authorizationAction; target=$authorizationTarget
+            status=$authorizationStatus; scope=$scope; artifact_full_id=$authorizationArtifact; ticket_id=$authorizationTicket; issued_at='2026-08-16T00:00:00+08:00'
+        })
+        if ($Action -eq 'CALL_QA') {
+            foreach ($item in @($Artifacts | Where-Object { $_.full_id -eq $ArtifactFullId })) { $item.flow_authorization_id = $authorizationId }
+        }
+    }
     return [ordered]@{
         schema_version='1.0'
         project_manifest=[ordered]@{
@@ -50,11 +70,12 @@ function New-Bundle(
         }
         decision_ledger=@()
         artifact_index=$Artifacts
+        flow_authorizations=$authorizations
         pending_repair_tickets=$Tickets
         run_log=@()
         dispatch=[ordered]@{
-            action=$Action; target=$Target; qa_mode=$QaMode; artifact_full_id=$ArtifactFullId; ticket_id=$TicketId
-            scope=[ordered]@{ episode_ids=@('E01'); scene_ids=@(); shot_ids=$ShotIds; beat_ids=@() }
+            action=$Action; target=$Target; qa_mode=$QaMode; artifact_full_id=$ArtifactFullId; ticket_id=$TicketId; authorization_id=$authorizationId
+            scope=$scope
             reason='S01 validator regression test'
         }
         delivery=@()
@@ -79,6 +100,11 @@ try {
     $plot = New-Artifact 'PLOT' 'PLOT-E01' 'V1' 'PASS'
     Invoke-Case 'p2-call-producer' (New-Bundle 'P2' 'READY' 'CALL_PRODUCER' 'storyboard-table-director' @($plot)) 0
 
+    $missingAuthorization = New-Bundle 'P2' 'READY' 'CALL_PRODUCER' 'storyboard-table-director' @($plot)
+    $missingAuthorization.flow_authorizations = @()
+    $missingAuthorization.dispatch.authorization_id = $null
+    Invoke-Case 'direct-producer-call-without-s01-authorization-is-rejected' $missingAuthorization 1
+
     $fourDigitBeatPlot = New-Artifact 'PLOT' 'PLOT-E01' 'V1' 'PASS'
     $fourDigitBeatPlot.source_beat_ids = @('BEAT-E01-S01-1000')
     Invoke-Case 'p2-accepts-four-digit-beat' (New-Bundle 'P2' 'READY' 'CALL_PRODUCER' 'storyboard-table-director' @($fourDigitBeatPlot)) 0
@@ -92,6 +118,11 @@ try {
 
     $storyboard = New-Artifact 'STORYBOARD_TABLE' 'STORYBOARD-E01-S01' 'V1' 'DRAFT' 'SCENE-E01-S01'
     Invoke-Case 'p2-call-qa' (New-Bundle 'P2' 'WAITING_QA' 'CALL_QA' 'short-drama-unified-qa' @($plot,$storyboard) 'STORYBOARD_TABLE' 'STORYBOARD-E01-S01-V1') 0
+
+    $unconsumedQaAuthorization = New-Bundle 'P2' 'WAITING_QA' 'CALL_QA' 'short-drama-unified-qa' @($plot,$storyboard) 'STORYBOARD_TABLE' 'STORYBOARD-E01-S01-V1'
+    $unconsumedQaAuthorization.flow_authorizations[0].status = 'ISSUED'
+    $unconsumedQaAuthorization.flow_authorizations[0].artifact_full_id = $null
+    Invoke-Case 'qa-rejects-unconsumed-production-authorization' $unconsumedQaAuthorization 1
 
     $mismatchedQaTarget = New-Bundle 'P2' 'WAITING_QA' 'CALL_QA' 'short-drama-unified-qa' @($plot,$storyboard) 'STORYBOARD_TABLE' 'STORYBOARD-E01-S01-V1'
     $mismatchedQaTarget.stage_state.current_artifact_full_id = 'STORYBOARD-E99-S99-V9'

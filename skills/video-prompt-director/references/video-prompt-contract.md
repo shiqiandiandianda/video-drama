@@ -22,6 +22,7 @@
 ```yaml
 schema_version: "1.0"
 project_id: PRJ-001
+flow_authorization_id: FLOW-AUTH-PRJ001-P6-0001
 scene_id: SCENE-E01-S01
 shot_id: SHOT-E01-S01-003
 source_beat_ids:
@@ -42,7 +43,7 @@ task:
   output_scope: SINGLE_SHOT
   delivery_mode: PROMPT_ONLY
   aspect_ratio: "9:16"
-  target_duration_seconds: 8
+  target_duration_seconds: 15
 
 approved_storyboard_set_full_id: APPROVED-STORYBOARD-E01-V1
 approved_image_full_id: IMG-E01-S01-003-V2
@@ -142,6 +143,8 @@ reference_bindings:
     asset_id: CHAR-HEROINE-01
     asset_version: V3
     mixed_slot: 1
+    slot_source: INPUT_LEDGER
+    availability: PROVIDED
     reference_role: IDENTITY_APPEARANCE
     inherit:
       - 成年身份、脸发、体型和本场服装
@@ -149,9 +152,11 @@ reference_bindings:
       - 参考姿势、背景、文字、水印和生成瑕疵
   - name: 客厅
     asset_type: SCENE
-    asset_id: SCENE-HOME-01
-    asset_version: V2
-    mixed_slot: 3
+    asset_id: null
+    asset_version: null
+    mixed_slot: 2
+    slot_source: AUTO_PLANNED
+    availability: REQUIRED_NOT_PROVIDED
     reference_role: SPACE_STYLE
     inherit:
       - 空间结构、门窗、家具和主光方向
@@ -184,9 +189,17 @@ start_state:
   characters:
     - name: 女主
       world_position: <世界位置>
-      screen_position: <屏幕投影>
+      screen_position: SCREEN_LEFT # SCREEN_LEFT | SCREEN_CENTER | SCREEN_RIGHT
+      depth_plane: MIDGROUND # FOREGROUND | MIDGROUND | BACKGROUND
       body_orientation: <双脚/骨盆/胸口/头部>
       gaze_target: <明确目标>
+      nearest_anchor: <最近固定锚点>
+      relative_to:
+        - target: <另一个可见人物名>
+          target_type: CHARACTER # CHARACTER | ANCHOR
+          horizontal_relation: LEFT_OF # LEFT_OF | RIGHT_OF | ALIGNED_HORIZONTAL | OVERLAPPING
+          depth_relation: SAME_DEPTH # IN_FRONT_OF | BEHIND | SAME_DEPTH
+          distance_relation: NEAR # NEAR | MEDIUM | FAR
       support_and_weight: <支撑脚与重心>
       action_stage: PREPARATION
       hand_and_contact: <双手与接触>
@@ -214,14 +227,16 @@ action_flow:
       primary_event: <唯一主要可见事件>
       action_physics: <触发、重心、动作、接触/惯性/恢复>
       performance: <相关微表演与听者反应>
+      spatial_execution: <位置变化的起点/路径/终点/新关系；不移动则 POSITIONS_UNCHANGED>
       camera_execution: <已确认运镜的触发、路径、落点>
       light_sound_change: <动作发生时的光影和声音反馈>
     - start_seconds: 2
-      end_seconds: 8
+      end_seconds: 15
       camera_start: <前一段落点>
       primary_event: <唯一主要可见事件>
       action_physics: <过程与结果>
       performance: <可见情绪变化>
+      spatial_execution: <位置变化或 POSITIONS_UNCHANGED>
       camera_execution: <继续/停稳，不新增运镜>
       light_sound_change: <现场声光>
 
@@ -277,8 +292,21 @@ sound:
 end_state:
   state_id: PE-E01-S01-003-V1
   state_kind: PLANNED
-  recommended_stable_frame_seconds: 7.7
-  characters: []
+  recommended_stable_frame_seconds: 14.7
+  characters:
+    - name: 女主
+      world_position: <计划停点世界位置>
+      screen_position: SCREEN_LEFT
+      depth_plane: MIDGROUND
+      body_orientation: <计划停点朝向>
+      gaze_target: <计划停点视线>
+      nearest_anchor: <最近固定锚点>
+      relative_to:
+        - target: <另一个可见人物名>
+          target_type: CHARACTER
+          horizontal_relation: LEFT_OF
+          depth_relation: SAME_DEPTH
+          distance_relation: NEAR
   props: []
   camera: <位置、高度、角度、焦段、f值、焦点、运动/停稳>
   lighting: <主光和场景状态>
@@ -288,6 +316,37 @@ end_state:
 
 continuity_constraints:
   - <人物、道具、空间、摄影机与声音连续性>
+
+continuity_checks:
+  sequence_index: 3
+  incoming:
+    status: PASS                    # 首段可为 BOUNDARY
+    neighbor_shot_id: SHOT-E01-S01-002
+    compared_state_ids: [PE-E01-S01-002-V1, SS-E01-S01-003-V1]
+    checked_fields: [CHARACTERS, PROPS, SPATIAL_WORLD, CAMERA, LIGHTING, SOUND]
+    mismatches: []
+    handoff_signature:
+      characters: []
+      props: []
+      spatial_world: []
+      camera: <共同摄影机接口>
+      lighting: <共同光线接口>
+      sound: <共同声音接口>
+    boundary_reason: null
+  outgoing:
+    status: PASS                    # 末段可为 BOUNDARY
+    neighbor_shot_id: SHOT-E01-S01-004
+    compared_state_ids: [PE-E01-S01-003-V1, SS-E01-S01-004-V1]
+    checked_fields: [CHARACTERS, PROPS, SPATIAL_WORLD, CAMERA, LIGHTING, SOUND]
+    mismatches: []
+    handoff_signature:
+      characters: []
+      props: []
+      spatial_world: []
+      camera: <共同摄影机接口>
+      lighting: <共同光线接口>
+      sound: <共同声音接口>
+    boundary_reason: null
 
 body_sections:
   reference_materials: <参考图素材说明；编辑/延长任务使用对应句式>
@@ -313,18 +372,25 @@ change_log: []
 - `approved_storyboard_set_full_id` 必须指向父级 `ApprovedStoryboardSet.full_id`；父集合与当前图片条目均须为 `APPROVED`。
 - `approved_image_full_id` 必须等于 `source_artifacts[role=APPROVED_STORYBOARD].full_id`。
 - `source_artifacts` 必须列出父级 `APPROVED_STORYBOARD_SET`、当前 `APPROVED_STORYBOARD` 图片条目、图片对应的 `STORYBOARD_PROMPT` 及其余全部直接权威来源，不使用单数 `source_artifact_id` 隐藏多来源关系。
+- `ASSET_LEDGER` 只在调用方实际提供资产台账时列入 `source_artifacts`；未提供时省略该来源，并让全部 `reference_bindings` 使用 `AUTO_PLANNED`。不得创建假的资产台账版本来满足格式。
 - 每个来源的 `scope` 必须能映射当前 `shot_id` 或其 `beat_id`。
 - `ORIGINAL_DIALOGUE.dialogue_policy` 只能为 `EXACT_SOURCE_TEXT` 或 `NO_DIALOGUE`。前者要求 `exact_lines` 与 `dialogue_audio` 的说话人、逐字文本和来源一一匹配；后者要求两个数组均为空。
-- `reference_bindings.mixed_slot` 使用整数存储，正文渲染为 `{{Mixed x}}`；编号不连续仍原样保留。
-- 没有真实槽位的资产可以保留稳定文字描述，但 `mixed_slot` 写 `null`，正文不得伪造编号。
+- `reference_bindings` 至少一项；`mixed_slot` 使用正整数存储，正文渲染为 `{{Mixed x}}`，每条 Prompt 必须从 1 连续自增且无空号。
+- 已提供资产使用 `slot_source: INPUT_LEDGER`、`availability: PROVIDED`，并保留真实 `asset_id/asset_version`。
+- 未提供资产时仍根据剧情和分镜创建 `slot_source: AUTO_PLANNED`、`availability: REQUIRED_NOT_PROVIDED`；`asset_id/asset_version` 为 `null`。自动槽位是待上传计划，不是伪造已存在资产。
+- 不同对象不得共用槽位，同一对象不得重复分配；正文出现的槽位集合必须与 `reference_bindings.mixed_slot` 完全一致。
 
 ## 4. 状态与时间轴
 
 - `status` 只能由 S05 写为 `DRAFT`。
+- `seedance-2.0` 的 `target_duration_seconds` 只能为 `15`；`seedance-2.5` 只能为 `30`。
 - `action_flow.timeline` 第一段从 `0` 开始；相邻段必须首尾相接，无重叠、无空隙；最后一段等于 `target_duration_seconds`。
+- 每个 `CHARACTER` 绑定在 `start_state.characters` 中必须有且只有一条记录，明确世界位置、屏幕横向、景深层、最近锚点、朝向和视线。两人及以上时，每条记录必须逐一描述与其他可见人物的横向、景深和距离关系。
+- 每个时间段必须有非空 `spatial_execution`：移动时写起点、路径、终点及变化后关系；不移动时显式写 `POSITIONS_UNCHANGED`。`end_state.characters` 保留每个可见人物的计划停点位置。
 - 一个时间段只承载一个主要事件；允许包含支撑该事件的表演、光影和声音。
 - 时间值使用数字秒，不在结构化字段中写“约”“左右”。
 - `end_state.state_kind` 固定为 `PLANNED`。实际视频验收后由外部流程生成 `ACTUAL` 状态，不覆盖历史计划记录。
+- `continuity_checks` 必须同时含 `incoming/outgoing`。真实相邻段使用 `PASS` 并比较两个 `state_id`；只有整个批次首尾可用 `BOUNDARY`。相邻两侧的 `handoff_signature` 必须完全相同，`mismatches` 必须为空。
 - `unresolved_fields` 若涉及身份、首帧位置、核心道具、原台词、画幅、时长、模型模式或运镜，必须阻断正式 body。
 
 ## 5. 正文分区和镜像
@@ -349,16 +415,18 @@ change_log: []
 
 结构化字段和正文出现冲突时，产物不合格；不得让自由文本 body 暗改锁定字段。
 
+`approved_start_and_spatial_state` 必须逐人原样包含 `name`、`screen_position`、`depth_plane`、`nearest_anchor`，以及每项人物关系的 `target`、`horizontal_relation`、`depth_relation`、`distance_relation`。只写“按参考图”“保持站位”“两人相对”不能视为镜像。
+
 ## 6. 字数与纯净度
 
 `body_char_count` 只统计 `body`：先把 `CRLF/CR` 归一化为 `LF`，再按 Unicode code point 计数；包含标点、空格和换行，不包含宿主展示时额外添加的 Markdown 代码围栏。
 
-- Seedance 2.5：必须 `body_char_count <= 5000`，同时仍需通过模型规则可用性门禁。
-- Seedance 2.0：当前资料未给出统一字符上限，不自行编造；仍应保持单镜头、动作驱动和必要信息密度。
+- Seedance 2.5：固定 30 秒，必须 `body_char_count <= 5000`。
+- Seedance 2.0：固定 15 秒；当前资料未给出统一字符上限，不自行编造。
 
 正文禁止：
 
-- `@素材名`、`{{Image x}}`、不存在的 Mixed 编号；
+- `@素材名`、`{{Image x}}`、缺少 Mixed 槽位、空号、未登记编号或一槽多物；
 - 多个片段标题或多次从 0 秒开始；
 - `END FREEZE`、`OS`、Emoji 标题、营销标签和“下一步我可以”；
 - QA 结论、规则讲解、白模/截图解析、RepairTicket、镜尾卡正文；
@@ -377,7 +445,7 @@ SHOT-E01-S01-004 / VP-E01-S01-004-V1
 <完整规格>
 ```
 
-每个规格独立校验、独立 QA、独立版本。一个镜头失败不得自动污染未受影响镜头。
+每个规格独立校验、独立 QA、独立版本；然后把完整规格按剧情顺序组成 JSON 数组并运行 `scripts/validate_prompt_sequence.ps1`。相邻对任一侧不是 `PASS`、邻居 ID 不互指、状态 ID 未同时比较或 handoff 签名不同，都不得批量交付。一个镜头失败只阻断其相邻接口，不得自动污染不相邻镜头。
 
 ## 8. QA 交接
 
@@ -390,11 +458,14 @@ qa_request:
     - PLOT-E01-V1
     - STORYBOARD-E01-S01-V2 / SHOT-E01-S01-003-V2
     - SCRIPT-E01-V1
-    - ASSET-LEDGER-PRJ001-V3
+    - ASSET-LEDGER-PRJ001-V3（仅调用方实际提供时）
     - SD20-RULES-V3.4
   project_constraints: <项目锁定事实与模型规则>
   change_set: null
   previous_version: null
+  flow_control:
+    production_authorization_id: <artifact.flow_authorization_id>
+    flow_state: <完整当前 S01 状态包，dispatch 为 CALL_QA>
 ```
 
 S05 不填写实际 `verdict`。QA 必须同时检查结构化规格与可投喂 `body`，并以 `full_id` 标识被检版本。

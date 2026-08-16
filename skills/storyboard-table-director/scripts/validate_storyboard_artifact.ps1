@@ -51,10 +51,11 @@ catch {
     exit 2
 }
 
-$required = @('schema_version','artifact_type','project_id','scene_id','source_beat_ids','artifact_id','artifact_version','full_id','source_artifact_id','source_version','source_full_id','source_status','source_stale','status','shot_map')
+$required = @('schema_version','artifact_type','project_id','flow_authorization_id','scene_id','source_beat_ids','artifact_id','artifact_version','full_id','source_artifact_id','source_version','source_full_id','source_status','source_stale','status','shot_map')
 foreach ($field in $required) { Require-Property $artifact $field 'root' | Out-Null }
 
 if ((Has-Property $artifact 'schema_version') -and $artifact.schema_version -ne '1.0') { $errors.Add('root.schema_version must be 1.0.') }
+if ((Has-Property $artifact 'flow_authorization_id') -and $artifact.flow_authorization_id -notmatch '^FLOW-AUTH-[A-Z0-9][A-Z0-9-]*-[0-9]{4}$') { $errors.Add('root.flow_authorization_id is invalid. Production must be dispatched by S01.') }
 if ((Has-Property $artifact 'artifact_type') -and $artifact.artifact_type -ne 'StoryboardTable') { $errors.Add('root.artifact_type must be StoryboardTable.') }
 if ((Has-Property $artifact 'scene_id') -and $artifact.scene_id -notmatch '^SCENE-E[0-9]{2,4}-S[0-9]{2,4}$') { $errors.Add('root.scene_id must match SCENE-E##-S##.') }
 if ((Has-Property $artifact 'artifact_id') -and (Has-Property $artifact 'scene_id')) {

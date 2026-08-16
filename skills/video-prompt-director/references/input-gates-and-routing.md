@@ -30,7 +30,7 @@ target:
   product_flow: <当前产品模式>
   generation_task: MULTIMODAL_REFERENCE
   aspect_ratio: "9:16"
-  duration_seconds: 8
+  duration_seconds: 15            # 2.0 固定 15；2.5 固定 30
   delivery_mode: PROMPT_ONLY
 
 approved_storyboard_set:
@@ -78,7 +78,7 @@ dialogue_source:
   exact_lines: []
 
 asset_ledger:
-  version: V3
+  version: null                    # 可选；未提供时由 S05 自动规划槽位
   bindings: []
 
 previous_end_state:
@@ -86,6 +86,11 @@ previous_end_state:
   state_kind: PLANNED
   source_status: LOCKED_UPSTREAM
   fields: {}
+
+next_start_state:
+  state_id: SS-E01-S01-004-V1
+  source_status: LOCKED_UPSTREAM
+  fields: {}                       # 末段则改为明确边界
 
 project_constraints: {}
 previous_artifact: null
@@ -105,9 +110,9 @@ change_set: null
 | 剧情演进 | `PASS` | 包含当前 `beat_id`、非 `STALE` |
 | 分镜表行 | `PASS` | 唯一映射当前 `shot_id`、非 `STALE` |
 | 原始对白 | 可定位 | 有对白时逐字文本、说话人和范围明确；无对白明确写 `NO_DIALOGUE` |
-| 资产台账 | 有版本 | 人物/场景/关键道具和 Mixed 映射可追踪 |
+| 资产台账 | 可选 | 有台账时验证来源；无台账时 S05 根据剧情与分镜自动规划人物、场景、关键道具等 Mixed 槽位 |
 | 模型规则 | `VERIFIED` | 模型、产品模式和任务类型在支持范围内 |
-| 上一镜状态 | 有来源标签 | 未知字段显式写 `UNKNOWN`，不得补猜 |
+| 相邻镜状态 | 有来源标签 | 首尾明确边界；中间镜同时提供上一镜尾与下一镜起点，未知字段不得补猜 |
 
 `ApprovedStoryboardSet.status: APPROVED` 不能只写在父集合上；当前图片条目必须带自己的 `full_id`、`source_beat_ids`、来源分镜 Prompt 版本和批准记录。
 
@@ -117,8 +122,10 @@ change_set: null
 - 图片、剧情或分镜表的 `shot_id` 不一致。
 - 模型规则只写模型名，没有已验证规则版本。
 - 原始对白缺字、说话人不明或两份锁定来源互斥。
-- 关键人物/道具缺资产事实，或槽位号是推测的。
+- 已提供资产之间身份/版本互斥，或无法判断某个必要槽位对应哪个剧情对象。
 - 当前动作必须改变已确认构图、镜头数或时长才可执行。
+
+“用户没有上传资产”不属于阻断项。S05 必须建立 `AUTO_PLANNED` 绑定并从 `{{Mixed 1}}` 连续自增；自动槽位是待上传输入计划，不冒充已存在资产。
 
 ## 3. 来源优先级
 
@@ -144,6 +151,7 @@ change_set: null
 - 已验收上一段末帧只覆盖可见的实际状态；若它含已识别生成错误，不把错误升级为事实。
 - 模型规则只约束表达格式和能力，不生成项目剧情事实。
 - `DERIVED_EXECUTION` 只允许补齐不改变上游语义的光学/执行参数。
+- 自动资产计划只从已确认人物、场景、关键道具和视觉锚点中选择，不得借槽位新增剧情对象。
 
 ## 4. 任务模式
 
@@ -195,9 +203,10 @@ change_set: null
 | 图片与剧情/分镜表互斥 | `HUMAN_GATE` |
 | 镜头设计、时长或动作容量错误 | S03 分镜表导演，并使相关下游 `STALE` |
 | 剧情、台词或因果错误 | S02，并按影响范围传播 `STALE` |
-| 资产/槽位缺失 | 资产台账阶段 |
+| 用户未提供资产/槽位 | S05 自动规划 `AUTO_PLANNED` 槽位并继续 |
+| 已提供资产身份/版本互斥 | 资产台账阶段或 `HUMAN_GATE` |
 | 模型/产品模式规则缺失 | `HUMAN_GATE`，补充已验证模型配置 |
-| Prompt 表达或连续性错误 | S05 通过 RepairTicket 修复 |
+| Prompt 表达、槽位或上下段连续性错误 | S05 通过 RepairTicket 修复 |
 | 同类修复连续两次失败 | `HUMAN_GATE` |
 
 阻断输出至少包含：`status`、`shot_id`、`blocked_fields`、`evidence`、`return_to` 和 `required_input`。
@@ -210,4 +219,4 @@ V3.6 的 A 颜色映射、B1/B2 白模和实际末帧状态卡是控制层，不
 - `QUICK_PREFLIGHT`：上游可在同轮提供已完成控制层；S05 只读取其 ID/状态。
 - `STRICT_PREFLIGHT`：上游白模尚未复核时 S05 暂停；复核通过后才继续。
 
-B1 不得绑定 Seedance。B2 只有实际生成、检查通过、绑定并取得真实 Mixed 编号后才可进入 `reference_bindings`。白模身份色、低模脸、摄影机代理、箭头、文字和白盒材质永不进入真人视频正文。
+B1 不得绑定 Seedance。B2 若已有实际资产则以 `INPUT_LEDGER/PROVIDED` 进入 `reference_bindings`；没有实际资产时，S05 仍按需要创建 `AUTO_PLANNED/REQUIRED_NOT_PROVIDED` 槽位。白模身份色、低模脸、摄影机代理、箭头、文字和白盒材质永不进入真人视频正文。
