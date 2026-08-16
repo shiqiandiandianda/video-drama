@@ -16,29 +16,32 @@
 
 ## 工作流
 
+S01 是整条流水线的编排层，负责判断当前阶段、核对版本并选择下一步；它不直接生产阶段产物。主生产链路如下：
+
 ```mermaid
-flowchart LR
-    A["P1 项目输入"] --> B["S02 剧情演进"]
-    B --> C["S06 QA: PLOT"]
-    C -->|PASS| D["S03 分镜表"]
-    C -->|REPAIR| B
-    D --> E["S06 QA: STORYBOARD_TABLE"]
-    E -->|PASS| F["S04 分镜图提示词"]
-    E -->|REPAIR| D
-    F --> G["S06 QA: STORYBOARD_PROMPT"]
-    G -->|PASS| H["外部生图工具"]
-    G -->|REPAIR| F
-    H --> I["人工 APPROVED"]
-    I --> J["S05 视频提示词"]
-    J --> K["S06 QA: VIDEO_PROMPT"]
-    K -->|PASS| L["交付 / 外部视频生成"]
-    K -->|REPAIR| J
-    M["S01 流程导演"] -.->|编排、状态与路由| B
-    M -.->|编排、状态与路由| D
-    M -.->|编排、状态与路由| F
-    M -.->|编排、状态与路由| J
-    M -.->|编排、状态与路由| K
+flowchart TB
+    A["剧本与项目约束"]
+    B["01 · 剧情演进<br/>S02 生产 → S06 QA:PLOT"]
+    C["02 · 分镜设计<br/>S03 生产 → S06 QA:STORYBOARD_TABLE"]
+    D["03 · 分镜图提示词<br/>S04 生产 → S06 QA:STORYBOARD_PROMPT"]
+    E["04 · 视觉确认<br/>外部生图 → 人工 APPROVED"]
+    F["05 · 视频提示词<br/>S05 生产 → S06 QA:VIDEO_PROMPT"]
+    G["交付<br/>外部视频生成"]
+
+    A --> B --> C --> D --> E --> F --> G
+
+    classDef source fill:#f6f7f9,stroke:#667085,color:#101828,stroke-width:1px
+    classDef stage fill:#eef4ff,stroke:#4f6b95,color:#172033,stroke-width:1px
+    classDef approval fill:#fff7e8,stroke:#b7791f,color:#3d2b0b,stroke-width:1px
+    classDef delivery fill:#ecfdf3,stroke:#3f7d5c,color:#153b2b,stroke-width:1px
+
+    class A source
+    class B,C,D,F stage
+    class E approval
+    class G delivery
 ```
+
+阅读规则很简单：每个生产阶段都要经过 S06 QA，`PASS` 才向下推进；`REPAIR` 只返回当前阶段做最小范围返修。分镜图是唯一额外需要人工 `APPROVED` 的门禁。
 
 实际生图和视频生成不包含在本仓库中；S04、S05 负责生产结构化提示词，S01 负责调度对应的外部工具。
 
