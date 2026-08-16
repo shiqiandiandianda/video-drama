@@ -1,4 +1,4 @@
 interface:
   display_name: "S05 视频提示词导演"
-  short_description: "根据确认分镜生成可追踪、可投喂的 Seedance 视频 Prompt"
-  default_prompt: "使用 $video-prompt-director 根据这张人工确认分镜和已通过的上游资料，生成单镜头 VideoPromptSpec。"
+  short_description: "生成自动规划槽位、固定15/30秒并校验衔接的Seedance视频Prompt"
+  default_prompt: "使用 $video-prompt-director 根据人工确认分镜和已通过的上游资料生成 VideoPromptSpec；未提供资产时自动规划连续 Mixed 槽位，按 2.0=15秒/2.5=30秒，并检查上下段衔接。"

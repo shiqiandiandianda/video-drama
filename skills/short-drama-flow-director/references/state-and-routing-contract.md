@@ -19,6 +19,7 @@ project_manifest: {}
 stage_state: {}
 decision_ledger: []
 artifact_index: []
+flow_authorizations: []
 pending_repair_tickets: []
 run_log: []
 dispatch: {}
@@ -71,6 +72,7 @@ next_action: CALL_PRODUCER
 ```yaml
 - project_id: PRJ-001
   artifact_type: PLOT
+  flow_authorization_id: FLOW-AUTH-PRJ001-P1-0001
   artifact_id: PLOT-E01
   artifact_version: V1
   full_id: PLOT-E01-V1
@@ -97,6 +99,31 @@ approved_items:
 ```
 
 图片本体仍保持自动 QA 的 `PASS`；人工状态写在父集合的逐镜条目中。P6 必须同时核对当前图片 `PASS` 和对应条目 `APPROVED`。
+
+### FlowAuthorization
+
+S01 是唯一可以签发流程授权的单元。每次 `CALL_PRODUCER` 或 `ROUTE_REPAIR` 都创建一个不可复用的授权记录：
+
+```yaml
+authorization_id: FLOW-AUTH-PRJ001-P2-0001
+project_id: PRJ-001
+stage: P2
+action: CALL_PRODUCER # CALL_PRODUCER | ROUTE_REPAIR
+target: storyboard-table-director
+status: ISSUED # ISSUED | CONSUMED | REVOKED
+scope:
+  episode_ids: [E01]
+  scene_ids: [SCENE-E01-S01]
+  shot_ids: []
+  beat_ids: []
+artifact_full_id: null
+ticket_id: null
+issued_at: 2026-08-16T00:00:00+08:00
+```
+
+生产单元只能消费与当前项目、阶段、动作、目标、范围和票据完全一致的 `ISSUED` 授权。产出后 S01 原子地把授权改为 `CONSUMED`，写入精确 `artifact_full_id`，并让产物及 `ArtifactIndex` 都携带相同 `flow_authorization_id`。授权不得跨产物、跨范围或跨版本复用；取消的派工标为 `REVOKED`。
+
+S06 只接受 S01 的 `CALL_QA`。该调度的 `authorization_id` 必须指向待检产物对应的 `CONSUMED` 生产授权，而不是另行签发一个 QA 授权。
 
 ## 3. 阶段门禁
 
@@ -147,6 +174,7 @@ dispatch:
   qa_mode: null
   artifact_full_id: null
   ticket_id: null
+  authorization_id: FLOW-AUTH-PRJ001-P1-0001
   scope:
     episode_ids: [E01]
     scene_ids: []
@@ -168,7 +196,7 @@ dispatch:
 | P6 生产 | `video-prompt-director` | `null` |
 | P7 | `delivery` 或明确视频平台 | `null` |
 
-`CALL_QA` 必须携带待检 `artifact_full_id`；`ROUTE_REPAIR` 必须携带 `ticket_id`；`MARK_STALE` 必须有非空受影响范围；`BLOCK` 必须说明缺失证据或冲突。
+`CALL_PRODUCER` 和 `ROUTE_REPAIR` 必须携带匹配的 `ISSUED authorization_id`；`CALL_QA` 必须携带待检 `artifact_full_id` 和该产物的 `CONSUMED authorization_id`；`MARK_STALE` 必须有非空受影响范围；`BLOCK` 必须说明缺失证据或冲突。生产或 QA 请求缺少合法授权时，固定返回 `FLOW_DISPATCH_REQUIRED`，不得继续到内容生成或裁决。
 
 ## 6. 初始化与交付
 

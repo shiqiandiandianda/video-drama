@@ -245,7 +245,7 @@ catch {
 }
 
 $topLevelRequired = @(
-    "schema_version", "project_id", "artifact_id", "artifact_version", "full_id",
+    "schema_version", "project_id", "flow_authorization_id", "artifact_id", "artifact_version", "full_id",
     "source_artifact_id", "source_version", "source_full_id", "source_artifacts", "status", "scope",
     "coverage_summary", "source_coverage", "decision_overrides", "conflicts",
     "unknowns", "scenes", "impact_scope"
@@ -254,12 +254,15 @@ foreach ($field in $topLevelRequired) {
     Require-Property $artifact $field "root" | Out-Null
 }
 
-foreach ($field in @("schema_version", "project_id", "artifact_id", "artifact_version", "full_id", "source_artifact_id", "source_version", "source_full_id", "status")) {
+foreach ($field in @("schema_version", "project_id", "flow_authorization_id", "artifact_id", "artifact_version", "full_id", "source_artifact_id", "source_version", "source_full_id", "status")) {
     if (Test-HasProperty $artifact $field) {
         if (-not (Test-NonEmptyString (Get-PropertyValue $artifact $field))) {
             Add-ValidationError "root.$field must be a non-empty string."
         }
     }
+}
+if ((Test-HasProperty $artifact "flow_authorization_id") -and $artifact.flow_authorization_id -notmatch '^FLOW-AUTH-[A-Z0-9][A-Z0-9-]*-[0-9]{4}$') {
+    Add-ValidationError "root.flow_authorization_id is invalid. Production must be dispatched by S01."
 }
 
 if ((Test-HasProperty $artifact "schema_version") -and $artifact.schema_version -ne "1.0") {

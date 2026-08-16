@@ -9,6 +9,14 @@ description: 将 QA 已通过的横向分镜表逐镜转译为单张静态分镜
 
 把一行已通过的分镜表忠实转译成一个 `StoryboardPromptSpec`。一条 Prompt 只对应一个 `shot_id`、一个静态画面和一个版本，同时完整继承该行的 `source_beat_ids`；不得补写上游没有的人物、道具、台词或剧情。
 
+## 中央流程硬门禁
+
+本 Skill 只能由 S01 `$short-drama-flow-director` 的当前 `CALL_PRODUCER` 或 `ROUTE_REPAIR` 调度进入。开始编写生图 Prompt 前，必须读取完整 S01 状态包并核对 `dispatch.authorization_id` 对应唯一 `ISSUED FlowAuthorization`，其 `project_id`、`stage: P3`、`action`、`target: storyboard-image-prompt-director`、范围和 `ticket_id`（返修时）必须与本任务完全一致。
+
+把状态包保存为 UTF-8 JSON，先运行 `..\short-drama-flow-director\scripts\validate_flow_state.ps1 -Path <flow-state.json>`；脚本通过且当前 dispatch 精确指向本 Skill 后才能继续。
+
+缺失或不匹配时立即停止，只输出 `FLOW_DISPATCH_REQUIRED`、不匹配证据和 `return_to: short-drama-flow-director`；不得生成 Prompt、正负面片段或替代内容。合法产物根级必须原样写入 `flow_authorization_id`。
+
 ## 开始前读取
 
 始终读取：
@@ -103,6 +111,9 @@ approved_upstream:
 project_constraints: <当前项目锁定规则>
 change_set: <UPDATE 时提供；首次 CREATE 为 null>
 previous_version: <REPAIR/UPDATE 时提供；首次 CREATE 为 null>
+flow_control:
+  production_authorization_id: <本产物的 flow_authorization_id>
+  flow_state: <完整当前 S01 状态包，dispatch 为 CALL_QA>
 ```
 
 只有独立 QA 返回 `PASS` 后，才允许进入分镜图生成。

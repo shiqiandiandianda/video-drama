@@ -87,6 +87,7 @@ decision_ref: DEC-024
 |---|---|
 | `/reference_bindings` | `body_sections.reference_materials` 和对应 body 段 |
 | `/start_state` | `body_sections.approved_start_and_spatial_state` 和必要的时间轴起点 |
+| `/start_state/characters` 人物位置关系 | 相关 `action_flow.timeline[*].spatial_execution`、`end_state.characters`、`body_sections.approved_start_and_spatial_state` 和 `body` |
 | `/action_flow/timeline` | `body_sections.continuous_timeline` |
 | `/dialogue_audio` | 对应时间段文字；不得改 `exact_text`，除非其路径明确开放且有上游确认 |
 | `/camera` | 对应时间段的运镜执行与 `body_sections.imaging` |
@@ -122,9 +123,9 @@ decision_ref: DEC-024
 4. 字段镜像只发生在第 4 节允许的依赖闭包。
 5. `video_prompt_id` 正确递增，`status` 为 `DRAFT`。
 6. 时间轴仍连续，总长未漂移。
-7. Mixed 映射未重排/补号；原始对白仍逐字匹配。
-8. 2.5（若已解锁）仍不超过 5000 字。
-9. 相邻镜头连续性没有被破坏。
+7. 未开放的 Mixed 对象没有换槽；全部槽位仍从 1 连续自增，正文与绑定一致；原始对白仍逐字匹配。
+8. 2.0 仍为 15 秒；2.5 仍为 30 秒且不超过 5000 字。
+9. 当前镜头与上一镜、下一镜的两侧 handoff 签名均已重新检查且一致。
 10. 修改未引入新人物、道具、剧情、切镜或运镜。
 
 ## 7. 失败升级

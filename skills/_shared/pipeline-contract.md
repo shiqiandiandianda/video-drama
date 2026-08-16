@@ -29,6 +29,7 @@ VP-E01-S03-005
 ```yaml
 schema_version: "1.0"
 project_id: PRJ-001
+flow_authorization_id: FLOW-AUTH-PRJ001-P2-0001
 artifact_id: <不带版本的稳定 ID>
 artifact_version: V1
 full_id: <artifact_id>-<artifact_version>
@@ -49,6 +50,8 @@ PlotProgressionSpec(PASS)
 ```
 
 生产 Skill 只写 `DRAFT` 或门禁失败时的 `HUMAN_GATE`。独立 QA 写 `CHECKING/PASS/REPAIR/HUMAN_GATE`；人工确认阶段写 `APPROVED`。
+
+S01 是唯一入口。S02-S05 及外部生图阶段必须收到 S01 签发、与当前阶段/目标/范围完全匹配的 `ISSUED FlowAuthorization` 才能生产；否则只返回 `FLOW_DISPATCH_REQUIRED` 并路由 S01，不得输出阶段产物。产物必须镜像该授权的 `authorization_id`。S01 登记结果时把授权改为 `CONSUMED` 并绑定精确 `artifact_full_id`。
 
 ## 3. BEAT 与镜头映射
 
@@ -75,11 +78,14 @@ qa_request:
   project_constraints: {}
   change_set: null
   previous_version: null
+  flow_control:
+    production_authorization_id: FLOW-AUTH-PRJ001-P2-0001
+    flow_state: <完整当前 S01 状态包，dispatch 为 CALL_QA>
 ```
 
 首次创建时 `change_set`、`previous_version` 为 `null`。`REPAIR`/`UPDATE` 必须提供上一版；`UPDATE` 还必须提供已确认 `ChangeSet`，`REPAIR` 必须提供有效 `RepairTicket` 并在内部正规化为最小变更范围。
 
-将信封保存为 UTF-8 JSON 后运行 `skills/_shared/validate_qa_request.ps1 -Path <qa-request.json>`；任何生产 Skill 的 `approved_upstream` 都必须保持数组类型，即使只有一个上游。
+将信封保存为 UTF-8 JSON 后运行 `skills/_shared/validate_qa_request.ps1 -Path <qa-request.json>`；任何生产 Skill 的 `approved_upstream` 都必须保持数组类型，即使只有一个上游。校验器同时执行 S01 状态校验，并核对当前 `CALL_QA`、待检产物、ArtifactIndex 与已消费生产授权；任何一项不一致都不得进入语义 QA。
 
 ## 5. StoryboardImage 与人工确认
 
@@ -88,6 +94,7 @@ qa_request:
 ```yaml
 schema_version: "1.0"
 project_id: PRJ-001
+flow_authorization_id: FLOW-AUTH-PRJ001-P4-0001
 scene_id: SCENE-E01-S03
 shot_id: SHOT-E01-S03-005
 source_beat_ids: [BEAT-E01-S03-004]

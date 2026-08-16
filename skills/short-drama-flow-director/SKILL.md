@@ -54,6 +54,10 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File "<SKILL_DIR>\scripts\val
 
 生产产物初始只能是 `DRAFT`；调用 `$short-drama-unified-qa` 时提交完整 `qa_request`，并保持 `approved_upstream` 为数组。不要代替 QA 写 `PASS`，也不要代替人工写 `APPROVED`。
 
+每次调用生产单元前，先在状态包中创建与本轮项目、阶段、目标、范围和票据完全一致的 `FlowAuthorization`，状态为 `ISSUED`，并把其 `authorization_id` 放入 `dispatch`。生产结果返回后，核对产物根级 `flow_authorization_id`，将授权原子地改为 `CONSUMED` 并绑定 `artifact_full_id`。没有这一步，不得直接进入任何工作 Skill。
+
+调用 S06 时，`qa_request.flow_control` 必须包含完整当前 S01 状态包和 `production_authorization_id`；当前 `dispatch` 必须是指向 S06 的 `CALL_QA`，且引用同一已消费生产授权。QA 拒绝任何直接生成、手工拼装或绕开 S01 的产物。
+
 ### 4. 处理裁决
 
 - `PASS`：写回当前产物精确版本；P1→P2、P2→P3、P3→P4、P4→P5、P6→P7。
@@ -70,10 +74,11 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File "<SKILL_DIR>\scripts\val
 
 1. `StageState` 的阶段、等待状态、当前目标和下一动作；
 2. `ArtifactIndex` 的当前版本、状态和 `stale`；
-3. `DecisionLedger` 的本轮人工决定或来源冲突；
-4. 待处理 `RepairTicket`；
-5. 追加式 `RunLog`；
-6. 本轮唯一 `dispatch`。
+3. `FlowAuthorization` 的签发、消费或撤销状态；
+4. `DecisionLedger` 的本轮人工决定或来源冲突；
+5. 待处理 `RepairTicket`；
+6. 追加式 `RunLog`；
+7. 本轮唯一 `dispatch`。
 
 不得原地覆盖已经 `PASS` 或 `APPROVED` 的版本。更新时创建新 `DRAFT` 版本并保留 `previous_version`、`ChangeSet` 和旧版索引。
 

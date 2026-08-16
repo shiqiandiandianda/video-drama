@@ -42,6 +42,9 @@ approved_upstream: [<用于裁决的完整权威来源>]
 project_constraints: {}
 change_set: null
 previous_version: null
+flow_control:
+  production_authorization_id: FLOW-AUTH-PRJ001-P2-0001
+  flow_state: <完整当前 S01 状态包，dispatch 为 CALL_QA>
 ```
 
 将请求保存为 UTF-8 JSON，先运行：
@@ -56,14 +59,16 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File "<SKILL_DIR>\..\_shared\
 
 逐项确认：
 
-1. `qa_mode` 与产物类型一致。
-2. `artifact_id` 是不带版本的稳定 ID，`full_id == artifact_id + "-" + artifact_version`。
-3. 待检版本是当前版本，未标记 `STALE`；生产产物通常为 `DRAFT`，流程可在检查期间记录 `CHECKING`，但不要为此原地改文件。
-4. 直接权威上游以完整对象提供，状态、版本、`project_id`、`scene_id`、`shot_id` 和 `source_beat_ids[]` 在适用处精确一致。
-5. `approved_upstream` 中没有被当作正式证据的 `DRAFT`、`REPAIR`、`HUMAN_GATE` 或 `STALE` 产物；`VIDEO_PROMPT` 必须引用人工 `APPROVED` 且条目非失效的分镜图。
-6. 返修或更新请求同时给出完整 `previous_version` 与精确 `change_set`；首次检查两者均为 `null`。
+1. 请求来自 S01：`flow_state` 通过 S01 校验，当前 `dispatch` 是指向本 Skill 的 `CALL_QA`，且模式、产物、范围和 `production_authorization_id` 一致。
+2. 待检产物根级 `flow_authorization_id` 指向唯一 `CONSUMED FlowAuthorization`，其项目、阶段、生产目标、范围和 `artifact_full_id` 与当前产物完全一致。
+3. `qa_mode` 与产物类型一致。
+4. `artifact_id` 是不带版本的稳定 ID，`full_id == artifact_id + "-" + artifact_version`。
+5. 待检版本是当前版本，未标记 `STALE`；生产产物通常为 `DRAFT`，流程可在检查期间记录 `CHECKING`，但不要为此原地改文件。
+6. 直接权威上游以完整对象提供，状态、版本、`project_id`、`scene_id`、`shot_id` 和 `source_beat_ids[]` 在适用处精确一致。
+7. `approved_upstream` 中没有被当作正式证据的 `DRAFT`、`REPAIR`、`HUMAN_GATE` 或 `STALE` 产物；`VIDEO_PROMPT` 必须引用人工 `APPROVED` 且条目非失效的分镜图。
+8. 返修或更新请求同时给出完整 `previous_version` 与精确 `change_set`；首次检查两者均为 `null`。
 
-缺少可补交的请求字段或权威证据时，不伪造 `PASS` 或返修内容。把无法验证项列为阻断问题并裁决 `HUMAN_GATE`；若证据明确显示错误由某个生产单元造成，则按真实归属裁决 `REPAIR` 并路由该单元。
+缺少可补交的请求字段或权威证据时，不伪造 `PASS` 或返修内容。流程授权缺失、伪造、未消费或不匹配时使用 `FLOW-AUTH-001`，裁决 `HUMAN_GATE` 并 `return_to: short-drama-flow-director`；不得把它当成普通内容返修。其他无法验证项列为阻断问题并裁决 `HUMAN_GATE`；若证据明确显示错误由某个生产单元造成，则按真实归属裁决 `REPAIR` 并路由该单元。
 
 ### 3. 运行机械校验
 
@@ -74,7 +79,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File "<SKILL_DIR>\..\_shared\
 | `PLOT` | `../script-plot-progression/scripts/validate_plot_progression.ps1 -Path <artifact.json>` |
 | `STORYBOARD_TABLE` | `../storyboard-table-director/scripts/validate_storyboard_artifact.ps1 -Path <artifact.json>` |
 | `STORYBOARD_PROMPT` | `../storyboard-image-prompt-director/scripts/validate_storyboard_prompt.ps1 -Path <artifact.json>` |
-| `VIDEO_PROMPT` | `../video-prompt-director/scripts/validate_video_prompt.ps1 -Path <artifact.json>`，并把 `body` 单独保存后运行 `validate_body.ps1 -BodyPath <body.txt> -MaxChars <0 或 5000>`；Seedance 2.0 用 `0`，2.5 用 `5000` |
+| `VIDEO_PROMPT` | `../video-prompt-director/scripts/validate_video_prompt.ps1 -Path <artifact.json>`，并把 `body` 单独保存后运行 `validate_body.ps1 -BodyPath <body.txt> -MaxChars <0或5000> -ExpectedDurationSeconds <15或30>`；2.0 用 `0/15`，2.5 用 `5000/30`。批量请求再运行 `validate_prompt_sequence.ps1 -Path <有序规格数组.json>` |
 
 `STORYBOARD_IMAGE` 先校验元数据、资源可访问性和来源链，再实际查看原图。无法打开原图时不得用文件名、缩略图描述或 Prompt 猜测画面。
 
@@ -83,6 +88,8 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File "<SKILL_DIR>\..\_shared\
 ### 4. 核对来源链与语义
 
 先从待检字段反向追踪到精确上游版本，再按当前模式清单逐项检查。对每个失败项记录：规则 ID、产物路径或镜头范围、权威预期、当前实际值和可复查证据。不要用“感觉不对”“优化一下”或没有来源定位的结论。
+
+`VIDEO_PROMPT` 中任何可见人物缺少明确位置关系时不得 `PASS`：使用 `VP-POSITION-001`。上游位置事实明确但 S05 未写全或正文未镜像时裁决 `REPAIR`；上游位置事实缺失或冲突时裁决 `HUMAN_GATE`，不得自行补站位。
 
 ### 5. 执行变更回归
 
@@ -118,4 +125,4 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File "<SKILL_DIR>\scripts\val
 
 ## 完成判定
 
-只有在模式正确、权威来源齐全、证据可复查、五选一清单执行完毕、回归范围闭合、裁决符合规则、路由指向真实责任单元，并且 QA 响应通过校验器时完成检查。
+只有在 S01 流程授权通过、模式正确、权威来源齐全、证据可复查、五选一清单执行完毕、回归范围闭合、裁决符合规则、路由指向真实责任单元，并且 QA 响应通过校验器时完成检查。

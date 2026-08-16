@@ -66,8 +66,12 @@ function Validate-Issue($Issue, [int]$Index, [string]$Mode, [string]$ExpectedPre
     if ((Has-Property $Issue 'severity') -and @('CRITICAL','HIGH','MEDIUM','LOW') -notcontains $Issue.severity) {
         $script:errors.Add("$context.severity is invalid.")
     }
-    if ((Has-Property $Issue 'rule_id') -and [string]$Issue.rule_id -notmatch "^$ExpectedPrefix-") {
+    if ((Has-Property $Issue 'rule_id') -and $Issue.rule_id -ne 'FLOW-AUTH-001' -and [string]$Issue.rule_id -notmatch "^$ExpectedPrefix-") {
         $script:errors.Add("$context.rule_id does not belong to qa_mode $Mode.")
+    }
+    if ((Has-Property $Issue 'rule_id') -and $Issue.rule_id -eq 'FLOW-AUTH-001') {
+        if ((Has-Property $Issue 'owner') -and $Issue.owner -ne 'short-drama-flow-director') { $script:errors.Add("$context.owner must be short-drama-flow-director for FLOW-AUTH-001.") }
+        if ((Has-Property $Issue 'repairable') -and $Issue.repairable -ne $false) { $script:errors.Add("$context.repairable must be false for FLOW-AUTH-001.") }
     }
     foreach ($field in @('blocking','repairable')) {
         if ((Has-Property $Issue $field) -and $Issue.$field -isnot [bool]) {
@@ -197,11 +201,11 @@ catch {
     exit 2
 }
 
-foreach ($field in @('schema_version','qa_mode','artifact_id','artifact_version','full_id','verdict','checked_against','issues','repair_ticket','stale_downstream','checked_at')) {
+foreach ($field in @('schema_version','qa_mode','artifact_id','artifact_version','full_id','flow_authorization_id','verdict','checked_against','issues','repair_ticket','stale_downstream','checked_at')) {
     Require-Property $root $field 'root' | Out-Null
 }
 
-foreach ($field in @('artifact_id','artifact_version','full_id','checked_at')) {
+foreach ($field in @('artifact_id','artifact_version','full_id','flow_authorization_id','checked_at')) {
     Require-NonEmptyString $root $field 'root' | Out-Null
 }
 
@@ -229,6 +233,9 @@ if ((Has-Property $root 'artifact_id') -and [string]$root.artifact_id -match '-V
 if ((Has-Property $root 'artifact_version') -and [string]$root.artifact_version -notmatch '^V[1-9][0-9]*$') {
     $errors.Add('root.artifact_version must match V<n>.')
 }
+if ((Has-Property $root 'flow_authorization_id') -and [string]$root.flow_authorization_id -notmatch '^FLOW-AUTH-[A-Z0-9][A-Z0-9-]*-[0-9]{4}$') {
+    $errors.Add('root.flow_authorization_id is invalid.')
+}
 if ((Has-Property $root 'artifact_id') -and (Has-Property $root 'artifact_version') -and (Has-Property $root 'full_id')) {
     $expectedFullId = "$($root.artifact_id)-$($root.artifact_version)"
     if ($root.full_id -ne $expectedFullId) {
@@ -239,6 +246,9 @@ if ((Has-Property $root 'artifact_id') -and (Has-Property $root 'artifact_versio
 if (Require-Array $root 'checked_against' 'root' $false) {
     if ((Has-Property $root 'full_id') -and @($root.checked_against) -notcontains $root.full_id) {
         $errors.Add('root.checked_against must include root.full_id.')
+    }
+    if ((Has-Property $root 'flow_authorization_id') -and @($root.checked_against) -notcontains $root.flow_authorization_id) {
+        $errors.Add('root.checked_against must include root.flow_authorization_id.')
     }
 }
 Require-Array $root 'issues' 'root' $true | Out-Null

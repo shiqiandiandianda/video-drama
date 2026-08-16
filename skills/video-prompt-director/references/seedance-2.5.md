@@ -1,85 +1,74 @@
-# Seedance 2.5 规则可用性门禁
+# Seedance 2.5 路由与正文规则
 
 ## 目录
 
-1. 当前支持状态
-2. 已知硬约束
-3. 正式启用所需配置
-4. 执行规则
+1. 项目锁定配置
+2. 时长与字符限制
+3. 素材槽位
+4. 正文与任务边界
 5. 禁止降级伪装
 
-## 1. 当前支持状态
+## 1. 项目锁定配置
 
-当前工作区没有独立、已验证的 Seedance 2.5 规则文件或通过样本。现有资料只给出模型名、`product_flow: 全能参考` 示例和正文不超过 5000 字的要求。
-
-这些信息不足以确认 2.5 的参考素材类型、任务句式、产品模式、槽位协议、编辑/延长语法和能力边界。因此默认：
+本仓库按当前项目要求内置 Seedance 2.5 的最小可执行配置，只覆盖“全能参考/多模态参考生成单段视频 Prompt”：
 
 ```yaml
+rule_id: SD25-PROJECT-V1
 model: seedance-2.5
-support_status: BLOCKED_PENDING_VERIFIED_PROFILE
-decision: HUMAN_GATE
+status: VERIFIED
+source: CURRENT_PROJECT_REQUIREMENT
+supported_product_flows:
+  - OMNI_REFERENCE
+supported_generation_tasks:
+  - MULTIMODAL_REFERENCE
+slot_syntax: "{{Mixed x}}"
+target_duration_seconds: 30
+body_char_limit: 5000
 ```
 
-不得因为用户填了 `model: seedance-2.5` 就直接套用 Seedance 2.0 规则。
+`EDIT_VIDEO`、`EXTEND_FORWARD`、`EXTEND_BACKWARD` 和 `COMPOSITE` 不在此最小配置内。调用这些任务时仍须提供覆盖对应能力、产品模式和准确句式的外部 `VERIFIED` 配置；不得从 2.0 推断。
 
-## 2. 已知硬约束
+## 2. 时长与字符限制
 
-当且仅当外部提供已验证 2.5 配置并通过第 3 节门禁后，仍必须满足：
-
-- `task.model: seedance-2.5`。
-- 目标 `product_flow` 明确且由已验证配置列为支持。
+- `task.model` 固定为 `seedance-2.5`。
+- `task.target_duration_seconds` 固定为 `30`，正文时间轴从 0 开始、连续无缝并准确结束在 30 秒。
 - `body_char_count <= 5000`。
 - 一份 `VideoPromptSpec` 只对应一个 `shot_id` 和一套连续时间轴。
-- APPROVED 分镜、PASS 上游、对白保真、锁定字段、计划镜尾和独立 QA 等公共协议继续有效。
+- APPROVED 分镜、PASS 上游、对白保真、计划镜尾、相邻 Prompt 双向连续性和独立 QA 等公共协议继续有效。
 
-5000 字计数口径：只统计 `body`，先把行尾归一化为 LF，再按 Unicode code point 计数；包含标点、空格和换行，不包含宿主展示添加的 Markdown 代码围栏。4999、5000、5001 必须分别做边界测试。
+5000 字计数口径：只统计 `body`，先把行尾归一化为 LF，再按 Unicode code point 计数；包含标点、空格和换行，不包含宿主展示添加的 Markdown 代码围栏。
 
-## 3. 正式启用所需配置
+正文超过 5000 时先删除规则解释和重复描述；若仍超限且删除会损失锁定内容，返回 S03 重新分段，不删剧情或台词。
 
-调用方必须提供：
+## 3. 素材槽位
 
-```yaml
-model_rule_profile:
-  rule_id: SD25-<VERSION>
-  model: seedance-2.5
-  status: VERIFIED
-  verified_at: <日期>
-  source: <官方/产品锁定规则或已验证内部规范>
-  supported_product_flows: []
-  supported_generation_tasks:
-    - MULTIMODAL_REFERENCE
-  accepted_reference_types: []
-  task_phrasing:
-    multimodal_reference: <准确句式>
-    edit_video: <若支持>
-    extend_forward: <若支持>
-    extend_backward: <若支持>
-    composite: <若支持>
-  slot_syntax: <准确格式>
-  body_char_limit: 5000
-  timing_rules: <平台已验证口径>
-  unsupported_features: []
-  evidence_examples: []
+每条 2.5 Prompt 都必须在首段列出本镜需要的 `{{Mixed x}}`：
+
+1. 根据已确认人物、场景、关键道具、怪物/能量体和分镜/连续性锚点判断必要资产。
+2. 每个独立语义对象占一个槽，同一对象不重复占槽，不一槽多物。
+3. 从 `{{Mixed 1}}` 开始连续自增，不留空号；正文编号与 `reference_bindings` 完全一致。
+4. 调用方已提供资产时写 `slot_source: INPUT_LEDGER`、`availability: PROVIDED`。
+5. 调用方未提供资产时仍写槽位，使用 `slot_source: AUTO_PLANNED`、`availability: REQUIRED_NOT_PROVIDED`，并让 `asset_id`/版本保持空值。
+6. 自动槽位只是上传计划，不得伪称资产已经存在，也不得借槽位新增剧情对象。
+
+示例：
+
+```text
+参考图素材说明：女主{{Mixed 1}}，追兵{{Mixed 2}}，雨夜巷口{{Mixed 3}}，铜钥匙{{Mixed 4}}。
 ```
 
-以下字段缺一即阻断：规则 ID/版本、`VERIFIED` 状态、来源、当前产品模式、当前任务类型、参考类型、任务句式、槽位语法和 5000 字限制。
+## 4. 正文与任务边界
 
-`evidence_examples` 至少应包含一条已验证通过的输入、正文和结果/QA 结论；只有失败案例不能把配置标为 `VERIFIED`。
+正文沿用公共五段顺序：素材说明；自包含 0 秒状态与计划停点；0–30 秒连续时间轴；摄影光学与光色材质；声音、连续性和稳定性。动作、对白、物理、表演、光学和光影遵守公共 reference，不因 30 秒而增加未确认剧情或切镜。
 
-## 4. 执行规则
+30 秒内容不足时，只展开已存在事件的准备、惯性、反应、呼吸、环境反馈和回稳；禁止重复动作、无动机慢推或静止填时。内容超载时返回 S03 重新分段。
 
-通过配置门禁后：
-
-1. 只按该配置选择产品模式、素材声明和任务句式。
-2. 公共的单镜头、上游锁定、动作物理、对白、连续性、光学和正文纯净规则继续执行。
-3. 配置与项目锁定事实冲突时，模型格式不能改写剧情/分镜；进入 `HUMAN_GATE`。
-4. 配置声明某任务不支持时不尝试提示词绕过，返回产品/模型路由。
-5. 正文超过 5000 时先删除规则解释和重复描述；若仍超限且删除会损失锁定内容，返回 S03/`HUMAN_GATE`，不删剧情或台词。
+批量交付前运行 `validate_prompt_sequence.ps1`，确认每个中间段的 incoming/outgoing 均为 `PASS`，相邻 handoff 签名一致且没有 mismatch。
 
 ## 5. 禁止降级伪装
 
-- 不把 Seedance 2.0 reference 改标题当作 2.5 规则。
-- 不从“全能参考”四个字推导完整产品能力。
-- 不仅凭 `<=5000` 就声称 2.5 可投喂。
-- 不用搜索到的未验证帖子、旧截图或模型推断自动把配置标为 `VERIFIED`。
-- 不在缺配置时输出“可执行暂定版”并暗示已经符合 2.5；只能输出缺口报告与 `HUMAN_GATE`。
+- 不把 2.0 的 15 秒时长套给 2.5。
+- 不把本最小配置用于编辑、延长或组合任务。
+- 不仅凭 `<=5000` 就忽略 30 秒、槽位或连续性规则。
+- 不用搜索到的未验证帖子、旧截图或模型推断扩展支持范围。
+- 不省略 Mixed 槽位，不使用 `@`、`{{Image x}}`、空号或未登记编号。

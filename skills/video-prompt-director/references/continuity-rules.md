@@ -10,8 +10,9 @@
 6. 道具
 7. 摄影机、光线和声音
 8. 计划镜尾
-9. 生成任务特殊规则
-10. 冲突处理
+9. 相邻 Prompt 双向检查
+10. 生成任务特殊规则
+11. 冲突处理
 
 ## 1. 连续性事实层
 
@@ -40,7 +41,7 @@
 - 用一个二维画面推翻锁定建筑结构和实际距离；
 - 把长焦透视压缩误读为人物真实距离很近。
 
-空间叙述至少包含：横向位置、景深层、身体朝向、视线目标和邻近锚点。动态对象再加起点、路径和终点。
+空间叙述至少包含：横向位置、景深层、身体朝向、视线目标和邻近锚点。动态对象再加起点、路径和终点。两人及以上时，必须逐人明确其相对每个其他可见人物的横向关系、景深关系和距离档位；“两人相对”“保持原站位”“按图中位置”均不合格。
 
 ## 3. 0 秒状态
 
@@ -54,6 +55,8 @@
 - 支撑脚、重心、动作阶段和速度趋势；
 - 双手、接触对象、伤势、呼吸和情绪；
 - 是否说话、口型是否启动。
+
+结构化记录固定使用：`screen_position` 为 `SCREEN_LEFT | SCREEN_CENTER | SCREEN_RIGHT`，`depth_plane` 为 `FOREGROUND | MIDGROUND | BACKGROUND`；`relative_to[]` 对其他可见人物逐项给出 `horizontal_relation`、`depth_relation` 和 `distance_relation`。这些字段必须原样镜像到正文的 0 秒状态段。
 
 ### 道具
 
@@ -124,7 +127,22 @@
 
 固定写 `state_kind: PLANNED`。视频生成并验收后，创建新的实际状态记录；不要篡改历史计划卡。
 
-## 9. 生成任务特殊规则
+## 9. 相邻 Prompt 双向检查
+
+批量生成时先按剧情顺序排列所有 `VideoPromptSpec`，再对每个中间 Prompt 做两次独立比较：
+
+1. `incoming`：上一 Prompt 的 `end_state` 对本 Prompt 的 `start_state`。
+2. `outgoing`：本 Prompt 的 `end_state` 对下一 Prompt 的 `start_state`。
+
+每次比较至少覆盖 `CHARACTERS`、`PROPS`、`SPATIAL_WORLD`、`CAMERA`、`LIGHTING`、`SOUND`。人物项必须包含身份/脸发/服装/伤势、位置/朝向/视线、动作阶段/重心/速度、情绪/呼吸；道具项必须包含归属、持物手、位置、朝向和状态。
+
+把比较后的共同接口写入 `handoff_signature`。相邻两侧的签名必须逐字段相同，双方 `compared_state_ids` 必须同时包含上一镜 `end_state.state_id` 和下一镜 `start_state.state_id`，`mismatches` 必须为空。首段没有上一镜或末段没有下一镜时可以写 `BOUNDARY`，但必须给出真实 `boundary_reason`；不能把“未提供相邻 Prompt”冒充边界。
+
+若发现不一致，先判断错误归属：正文镜像/动作回稳/持物手/声音尾部由 S05 修复；分镜首帧、机位或剧情设计冲突返回上游。修复后必须同时重跑当前段、上一段和下一段检查，不得只改一侧声明。
+
+批量交付前运行 `scripts/validate_prompt_sequence.ps1`。单条 Prompt 的边界检查不能替代批量的相邻比较。
+
+## 10. 生成任务特殊规则
 
 - `MULTIMODAL_REFERENCE`：0 秒以批准分镜图为主，上一镜状态用于校验能否衔接。
 - `EDIT_VIDEO`：未点名区域/时间段保持源视频不变；编辑前后边界分别记录连续性。
@@ -132,7 +150,7 @@
 - `EXTEND_BACKWARD`：计划结束点必须无缝接到源视频开头实际状态。
 - `COMPOSITE`：分别记录被参考素材和被编辑视频的继承/忽略项，防止槽位和角色串绑。
 
-## 10. 冲突处理
+## 11. 冲突处理
 
 | 冲突 | 处理 |
 |---|---|
