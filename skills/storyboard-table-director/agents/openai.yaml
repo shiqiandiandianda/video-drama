@@ -1,0 +1,4 @@
+interface:
+  display_name: "S03 分镜表导演"
+  short_description: "将已通过的剧情演进转成可审阅、可追踪的九列横向导演分镜表"
+  default_prompt: "使用 $storyboard-table-director 将已通过的剧情演进转换为九列导演分镜表，并提交 STORYBOARD_TABLE QA。"

@@ -1,0 +1,4 @@
+interface:
+  display_name: "剧本剧情演进导演"
+  short_description: "忠实拆解剧本并生成连续、可追踪、可检查的剧情 BEAT"
+  default_prompt: "Use $script-plot-progression to turn this script and confirmed director decisions into a source-faithful PlotProgressionSpec."

@@ -1,0 +1,4 @@
+interface:
+  display_name: "S01 AI 短剧流程导演"
+  short_description: "统一调度短剧全链路，管理阶段、门禁、版本、返修与人工确认"
+  default_prompt: "使用 $short-drama-flow-director 检查当前短剧项目状态并安全推进到下一可执行阶段。"

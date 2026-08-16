@@ -1,0 +1,4 @@
+interface:
+  display_name: "S04 分镜图提示词导演"
+  short_description: "把通过审核的分镜表逐镜转为可执行静态生图 Prompt"
+  default_prompt: "使用 $storyboard-image-prompt-director 将这份已通过 QA 的分镜表转成逐镜分镜图提示词。"

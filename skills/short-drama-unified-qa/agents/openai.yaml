@@ -1,0 +1,4 @@
+interface:
+  display_name: "S06 短剧统一 QA"
+  short_description: "统一检查短剧阶段产物，约束放行并签发最小返修票据"
+  default_prompt: "使用 $short-drama-unified-qa 检查这份短剧阶段产物，给出可执行的 QA 裁决与最小返修票据。"
