@@ -187,3 +187,40 @@ continuity_checks:
 - FlowAuthorization 签发/消费/复核链条（架构核心，不动）。
 - `source_beat_ids` 数组、`full_id` 不变量、状态枚举。
 - S04 图轨全部能力（只是不再必经）。
+
+---
+
+## 5. 决策 5：要求由 S01 签发 —— "提要求 / 做东西 / 质检" 三段分工
+
+用户明确的架构分工原则：
+
+```text
+S01 提要求（派工时签发要求与验收标准）
+  → 生产 skill 做东西（自带完整生产能力，按签发要求生产）
+    → S06 质检（只针对已做出的产物，对照签发要求 + 权威上游 + 已有事实裁决）
+```
+
+- **能力是生产 skill 的**：规则、技法、组装逻辑常驻在各 skill 的 references 里，QA 不教生产、生产不自检放行。
+- **要求是 S01 的**：质量要求与本轮验收标准不再只散落在 QA 清单里，而由 S01 随派工显式签发、统一下达。
+- **质检是 S06 的，且只检"已有之物"**：QA 的检查对象永远是已经做出来的产物；检查依据 = 已有产物 + S01 签发要求 + 权威上游产物。没有依据支撑的检查项不得开单，QA 不凭空发明标准。
+
+### 落地改动
+
+1. **FlowAuthorization / dispatch 增加 `requirements` 字段**：
+
+```yaml
+dispatch:
+  action: CALL_PRODUCER
+  target: storyboard-table-director
+  authorization_id: FLOW-AUTH-PRJ001-P2-0001
+  scope: { ... }
+  requirements:
+    quality_bar: [九列齐备, 运镜必须有触发与落点, 窗口内不重复信息]
+    project_constraints: { aspect_ratio: "9:16", model: seedance-2.0 }
+    focus: [跨集承接, 邻镜流畅]        # 本轮特别强调项
+```
+
+2. **生产 skill**：开工前读取 `dispatch.requirements`，产物根级镜像 `requirements_ref`（指向授权 ID）；references 里的能力规则不变（能力常驻，要求按需下发）。
+3. **S06**：`qa_request.flow_control` 已携带完整状态包，QA 从当前 dispatch 读取同一份 `requirements`；裁决不变量新增一条——**没有签发要求或权威依据支撑的检查项不得作为阻断问题**（沿用现有"禁止无来源定位结论"的精神，并显式化）。
+4. **三件套同步原则**：任何新增 QA 硬检 = 同步新增生产端能力规则 + S01 可签发的要求项（+ 能脚本化的机械校验）。只加 QA 不加生产能力，会制造必然 REPAIR 循环。
+5. **与现有设计的关系**：`project_constraints` 已经在 qa_request 里流通，本次把它升级为完整的 `requirements` 通道并前移到派工环节；QA 清单从"唯一标准来源"退为"检查执行细则"，标准签发权收归 S01。
