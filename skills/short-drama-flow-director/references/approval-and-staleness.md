@@ -8,7 +8,9 @@
 4. 变更算法
 5. 返修与拒绝路由
 
-## 1. 人工确认门禁
+## 1. 人工确认门禁（仅 VISUAL_TRACK）
+
+> 本节与 §2 仅在 VISUAL_TRACK 启用；DIRECT_TRACK 不产生图片与人工确认集。
 
 只向导演提交已经 `STORYBOARD_IMAGE: PASS`、资源可访问、版本当前且非 `STALE` 的图片。确认请求逐镜展示 `shot_id`、图片精确 `full_id`、来源 Prompt 精确版本和需要锁定的画面事实。
 
@@ -28,12 +30,15 @@
 
 | 发生变化的上游 | 标记 `STALE` 的最小下游 | 恢复阶段 |
 |---|---|---|
-| 某个 BEAT | 映射该 BEAT 的 StoryboardRow、同镜头 S04、图片、Approved 条目、S05 | P2 |
-| 某行 StoryboardRow | 同 `shot_id` 的 S04、图片、Approved 条目、S05 | P3 |
+| 某个 BEAT | 映射该 BEAT 的 StoryboardRow、同镜头 S04、图片、Approved 条目、覆盖镜头的段级 S05 | P2 |
+| 某行 StoryboardRow | 同 `shot_id` 的 S04、图片、Approved 条目、`covered_shot_ids` 含该镜的段级 S05 | P3 |
 | 某个 StoryboardPromptSpec | 同 `shot_id` 的图片、Approved 条目、S05 | P4 |
 | 图片重新生成/改选版本 | 同 `shot_id` 的 Approved 条目和 S05 | P5 |
 | Approved 条目的锁定事实或版本 | 同 `shot_id` 的 S05 | P6 |
-| 项目级画幅/风格/人物资产 | 只标记实际依赖该字段的镜头链；无法证明范围时 `HUMAN_GATE` | 最早受影响阶段 |
+| EpisodeHandoff | 下一集 PLOT 及下游全部产物 | 下一集 P1 |
+| 项目级画幅/风格锁/人物资产 | 只标记实际依赖该字段的镜头链；无法证明范围时 `HUMAN_GATE` | 最早受影响阶段 |
+
+DIRECT_TRACK 下无 S04/图片/Approved 条目环节：BEAT 或 StoryboardRow 变化直接使覆盖镜头的段级 S05 `STALE`。
 
 不要因一个镜头变化而整集失效；也不要在缺少映射证据时假装能够精确缩小范围。
 

@@ -160,3 +160,24 @@
 | 单帧看不出速度、距离、画外人 | 标 `UNKNOWN` 或继承锁定资料 |
 | 参考图存在文字/拼版编号/水印 | 忽略，不进入视频；剧情要求的精确文字必须另有源文本 |
 | 复杂空间只能靠新切镜/跨轴修复 | 返回 S03，不由 S05新增拍法 |
+
+## 12. 段级连续与窗口 ±2（schema 2.0）
+
+段级重构后，本文件各节中"上一镜/下一镜"在段间读作"上一段/下一段"，在段内读作 `timeline` 相邻镜。
+
+### 段间承接（严格签名）
+
+- 本段 `start_state` 与上一段 `final_state` 逐项签名一致（人物/道具/空间/摄影机/光线/声音），`continuity_checks.incoming` 记录两个 `state_id` 的比较；`mismatches` 必须为空。
+- 跨集首段：`start_state` 与上集 `EpisodeHandoff` 的终帧状态签名一致，`source_status: EPISODE_HANDOFF`；时间跳跃须在 Handoff 允许范围内。
+
+### 段内切镜（直接继承）
+
+- 镜 n 的 `spatial_frame` 直接继承镜 n-1 的 `shot_end_state`；禁止切镜重置人物姿势、位置、道具或伤势。
+
+### 窗口 ±2（弱规则）
+
+对 distance=2 的段（中间隔一段）执行弱规则比较，字段：`CHARACTER_IDENTITY / PROP_OWNERSHIP / WORLD_ANCHORS / KNOWLEDGE_STATE`：
+
+- 允许中间段合理演化：人物移动、道具交接、信息揭示、伤势按剧情加重。
+- 禁止矛盾：人物身份替换、伤势自愈、道具瞬移（无交接记录的位置跳变）、场景锚点跳变、信息状态倒退（已知道变为不知道）。
+- 命中禁止项记入 `window_checks[].mismatches`，该段不得 `PASS`。

@@ -68,8 +68,11 @@ plot-progression-E01-V1.json
 - `SCENE_FACT`
 - `ASSET_CONSTRAINT`
 - `TRANSCRIPT`
+- `EPISODE_HANDOFF`
 
 `TRANSCRIPT` 只有在相应内容已经标记确认状态时才能覆盖剧本。
+
+`EPISODE_HANDOFF` 是上一集 P7 交付的集间交接包（`HANDOFF-E##`），是非首集项目首 BEAT `start_state` 的合法权威来源。使用规则见 `continuity-rules.md` 跨集连续章节。
 
 ## 来源覆盖
 
@@ -136,6 +139,22 @@ plot-progression-E01-V1.json
     "interior_exterior": "内",
     "location": "父亲家餐厅"
   },
+  "scene_main": "住宅",
+  "scene_sub": "住宅-餐厅",
+  "spatial_anchors": [
+    {"kind": "FIXTURE", "name": "餐桌", "screen_position": "画面中央偏右", "description": "长方形木桌，固定不动"},
+    {"kind": "FIXTURE", "name": "餐厅门", "screen_position": "画面左侧", "description": "通往走廊的单开门"},
+    {"kind": "CAMERA_ANCHOR", "name": "主机位", "screen_position": "餐厅门侧", "description": "摄影机主要位于门侧朝餐桌方向拍摄"}
+  ],
+  "scene_tone": {
+    "style": "现实都市家庭悬疑",
+    "color_palette": "暖黄主调 + 冷灰辅助，室内暖室外冷",
+    "rhythm": "克制压迫，情绪递进"
+  },
+  "light_base": {
+    "key_direction": "右侧窗外",
+    "color_temperature": "暖黄"
+  },
   "characters_present": ["女主", "父亲"],
   "scene_start_state": {},
   "beats": [],
@@ -149,6 +168,9 @@ plot-progression-E01-V1.json
 - 使用正整数 `scene_number`。
 - 为非标准剧本保留所有参与划分判断的来源范围。
 - 只列真实在场或被剧本明确置于画外的角色；画外状态写入对应状态对象。
+- `scene_main` 为场景大类（住宅/街道/山林等），`scene_sub` 为具体子类（住宅-餐厅、村落-院内、山林-泥潭外缘等）；**禁止只写大类裸词**（如"室内""室外""院子里"），子类必须具体到可区分"院内 vs 室内"这类易混空间。
+- `spatial_anchors` 至少 2 项；`kind` 为 `FIXTURE`（固定建筑/家具/门窗/树木/界碑等）或 `CAMERA_ANCHOR`（摄影机主位置与朝向，补丁③）；每项给出画面方位 `screen_position` 与可识别视觉特征。现实与闪回属于不同场景子类，闪回场次的锚点独立声明。
+- `scene_tone` 给本场风格/色彩/节奏三项，供段 body 第三节渲染；`light_base` 给主光方向与色温，供第十节渲染。二者从剧本场景描述与已确认决定推导，推不出时写入 `unknowns` 并阻断，禁止编造。
 
 ## BEAT 字段
 
@@ -316,6 +338,8 @@ plot-progression-E01-V1.json
 - 保持情绪变化具有来源证据。
 - 保持未解决冲突与 `HUMAN_GATE` 状态一致。
 - 保持 S02 产物不含 `shot_id` 或镜头设计字段。
+- 保持每个场次 `scene_sub` 非空且非大类裸词、`spatial_anchors` 至少 2 项且至多一个 `CAMERA_ANCHOR`。
+- 非首集项目：首个 BEAT 的 `start_state` 必须可追溯到 `EPISODE_HANDOFF` 来源，或在 `notes` 显式标记时间跳跃及幅度；同场景时 `spatial_anchors` 不得与 Handoff 的禁止重置项矛盾。
 
 ## 完整最小示例
 

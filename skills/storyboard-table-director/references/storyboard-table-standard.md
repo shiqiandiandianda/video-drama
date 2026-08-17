@@ -147,6 +147,30 @@ shot_map:
     source_stale: false
     source_beat_ids: [BEAT-E01-S01-001]
     status: DRAFT
+    scene_sub: 住宅-餐厅
+    spatial_anchors:
+      - {kind: FIXTURE, name: 餐桌, screen_position: 画面中央偏右, description: 长方形木桌}
+      - {kind: CAMERA_ANCHOR, name: 主机位, screen_position: 餐厅门侧, description: 朝餐桌方向拍摄}
+    screen_lock:
+      characters:
+        - {name: 女主, screen_side: LEFT, vertical: EYE_LEVEL}
+        - {name: 父亲, screen_side: RIGHT, vertical: EYE_LEVEL}
+      main_axis: 左→右
+      two_shot_same_direction: true
+    end_state:
+      characters: {女主: 站在餐桌旁等待, 父亲: 抬头看向女主}
+      props: {录取通知书: 平放在父亲面前}
+      camera: {position: 门侧平视, focus: 父亲眼睛}
+      action_stop: 父亲抬头动作完成瞬间
+    dialogue_delivery:
+      - speaker: 女主
+        text_source: BEAT-E01-S01-001#dialogue[0]
+        pause_before_keywords: ["考上了"]
+        pause_seconds: 0.3
+        stress_keywords: ["考上了"]
+        primary_gesture: 右手轻推通知书
+        after_hold_s: 0.5
+    segment_hint: null
     columns:
       scene: 日内／酒店房间
       shot_no: "01"
@@ -160,6 +184,14 @@ shot_map:
 ```
 
 一个镜头可覆盖多个紧密相连的 BEAT，一个 BEAT 也可拆为多镜；所有 BEAT 必须至少在 `shot_map` 出现一次。`columns` 是九列表正文的规范机器源，Markdown 表必须由它渲染，禁止分别维护两份可能漂移的正文。
+
+### 机器侧新增字段（十五节渲染的事实源）
+
+- `scene_sub` / `spatial_anchors`：逐镜镜像 S02 同名字段，不得改写；与 S02 不一致即不合格。
+- `screen_lock`：本镜人物画面位置锁。`screen_side` 取 `LEFT | RIGHT | CENTER`，`vertical` 取 `HIGH | LOW | EYE_LEVEL`；`main_axis` 写人物主关系轴（如"左→右""门口→床区"）；`two_shot_same_direction` 表示正反打保持同向。同场各镜的 `screen_lock` 不得无理由互换左右或镜像。
+- `end_state`（镜尾状态，补丁①）：本镜终帧的人物位置/姿态/视线/手部、道具位置状态、摄影机机位与焦点、动作停点。镜头与 BEAT 为 1:1 覆盖时默认继承所覆盖末个 BEAT 的 `end_state`；一个 BEAT 拆成多镜时，中间镜的 `end_state` 由 S03 显式给出（这是镜头设计决策）。下一镜必须直接继承上一镜 `end_state`，禁止切镜重置。
+- `dialogue_delivery`：本镜每句台词的演绎参数——停顿关键词与秒数、重音关键词、主手势、台词后留白秒数；`text_source` 指回 BEAT 的 dialogue 项，台词文本本身禁止在此重复。无对白镜头使用空数组。
+- `segment_hint`：可选分段边界建议（`null` 或 `"BREAK_AFTER"` 表示建议本镜之后切段），供 S01 派工与 S05 组段参考；S05 可在时长上限内调整，但不得无理由忽略。
 
 `StoryboardTable` 是单场容器，因此使用单值 `scene_id`。多场请求输出 `StoryboardTableSet` 包装下的多个单场表，每个子表保留自己的全局字段。表级容器没有单一镜头时不要伪造 `shot_id`；把每行视为规范 `StoryboardRow` 子产物，并在 `shot_map` 上完整携带正文、`project_id`、`scene_id`、`shot_id`、稳定产物 ID、版本、来源和状态。
 

@@ -19,8 +19,13 @@
 | `STB-AXIS-001` | 互动轴、运动轴、视线、世界左右和出入方向成立 | `AXIS_OR_POSITION_CONTINUITY` |
 | `STB-ACTION-001` | 动作起点、过程、接触反馈、结果与停点完整 | `ACTION_PHASE_MISSING` |
 | `STB-ACTION-002` | 动作既不过碎也不超载；短镜主目标和动作拍数量受控 | `ACTION_LOAD_INVALID` |
-| `STB-DIALOGUE-001` | 原台词逐字保留、说话人正确，并与动作/听者反应同步 | `DIALOGUE_STAGING_INVALID` |
-| `STB-DURATION-001` | 秒数可容纳真实语速、动作、停顿和反应 | `DURATION_INSUFFICIENT` |
+| `STB-DIALOGUE-001` | 原台词逐字保留、说话人正确，并与动作/听者反应同步；`dialogue_delivery` 演绎方式与情绪匹配 | `DIALOGUE_STAGING_INVALID` |
+| `STB-DURATION-001` | 秒数可容纳真实语速、动作、停顿和反应；单镜 ≥1.5 秒为硬下限 | `DURATION_INSUFFICIENT` |
+| `STB-FIELD-001` | 段级六字段齐备：`scene_sub`（非裸词，主-子格式）、`spatial_anchors`（≥2 且恰含 1 个 CAMERA_ANCHOR）、`screen_lock`、`end_state`、`dialogue_delivery`、`segment_hint` | `SEGMENT_FIELD_MISSING` |
+| `STB-SCREEN-001` | `screen_lock` 场级一致：同场各镜人物屏幕侧不互换、不镜像，除非该镜有明确剧情理由并在行内注明 | `SCREEN_LOCK_VIOLATION` |
+| `STB-ENDSTATE-001` | 每镜 `end_state` 齐备（人物/道具/摄影机/动作停点）；下一镜起始状态直接继承，不切镜重置 | `END_STATE_MISSING` |
+| `STB-WINDOW-001` | 3 镜窗口自检：任意连续 3 镜内景别不三连相同、主运镜不同向重复、信息不重复披露 | `WINDOW_MONOTONY` |
+| `STB-SEGMENT-001` | `segment_hint` 分组 2–6 镜且镜号连续，可拼成 15s（2.0）/30s（2.5）段，段覆盖同场镜头 | `SEGMENT_HINT_INVALID` |
 | `STB-PERFORMANCE-001` | 情绪转成可见微表演；长近景/特写不空转 | `PERFORMANCE_NOT_VISIBLE` |
 | `STB-ENSEMBLE-001` | 多人镜头主次明确，不全员冻结或机械同步反应 | `ENSEMBLE_STAGING_FLAT` |
 | `STB-CONTINUITY-001` | 人脸、发型、服装、伤口、姿势、道具归属和场景锚点连续 | `ASSET_STATE_DISCONTINUITY` |
@@ -36,7 +41,8 @@
 
 ## 路由与表级裁决
 
-- 镜头设计、机位、轴线、运镜、时长、表演：`storyboard-table-director`。
+- 镜头设计、机位、轴线、运镜、时长、表演、段级六字段（`scene_sub`/`spatial_anchors`/`screen_lock`/`end_state`/`dialogue_delivery`/`segment_hint`）与 3 镜窗口问题：`storyboard-table-director`。
+- `scene_sub` 裸词、锚点体系或 `scene_tone`/`light_base` 根因错误：`script-plot-progression`。
 - Plot 已经遗漏/错序/改台词：`script-plot-progression`，并使相关镜头链失效。
 - 任一行失败时父表不得 `PASS`。
 - 仅当全部行通过时输出 `PASS`；流程写回必须同时将父表和全部 `shot_map[].status` 设为 `PASS`。

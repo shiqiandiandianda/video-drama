@@ -64,10 +64,12 @@
 
 | 真实变更位置 | 最小 `STALE` 下游 |
 |---|---|
-| 某 BEAT | 映射该 BEAT 的分镜行，以及对应 S04、图片、S05 |
-| 某 StoryboardRow | 同 `shot_id` 的 S04、图片、S05 |
-| 某 StoryboardPromptSpec | 同 `shot_id` 的图片与 S05 |
-| 某分镜图版本 | 同 `shot_id` 的 S05 |
-| 某 VideoPromptSpec | 当前 VP 检查状态；必要时回归相邻镜连续性 |
+| 某 BEAT | 映射该 BEAT 的分镜行，以及对应 S04、图片、`covered_shot_ids` 含该镜的段级 S05 |
+| 某 StoryboardRow | 同 `shot_id` 的 S04、图片，以及 `covered_shot_ids` 含该镜的段级 S05 |
+| 某 StoryboardPromptSpec | 同 `shot_id` 的图片与段级 S05 |
+| 某分镜图版本 | 同 `shot_id` 的段级 S05 |
+| 某 VideoPromptSpec（段） | 当前段检查状态；`final_state` 变化时下一段 `start_state` 承接失效，必要时回归窗口 ±2 段 |
+| 某 EpisodeHandoff | 下一集 PLOT 及下游全部产物 |
+| 无图轨（DIRECT_TRACK）某 BEAT/StoryboardRow | 直接使覆盖镜头的段级 S05 失效 |
 
 只报告受影响选择器，不把整集全部标为失效，除非权威证据证明影响确实覆盖整集。

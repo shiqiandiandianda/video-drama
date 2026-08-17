@@ -1,4 +1,4 @@
-[CmdletBinding()]
+﻿[CmdletBinding()]
 param()
 
 $ErrorActionPreference = 'Stop'
@@ -18,12 +18,17 @@ function New-Artifact(
     [AllowNull()][object]$SceneId = $null,
     [AllowNull()][object]$ShotId = $null
 ) {
-    return [ordered]@{
+    $artifact = [ordered]@{
         project_id='PRJ-001'; artifact_type=$Type; artifact_id=$Id; artifact_version=$Version; full_id=($Id + '-' + $Version)
         flow_authorization_id='FLOW-AUTH-PRJ001-HISTORY-0001'
         status=$Status; current=$true; stale=($Status -eq 'STALE'); scene_id=$SceneId; shot_id=$ShotId
         source_beat_ids=@(); source_full_ids=@(); resource=('outputs/' + $Id.ToLowerInvariant() + '.json')
     }
+    if ($Type -eq 'VIDEO_PROMPT') {
+        $artifact['segment_id'] = 'SEG-E01-001'
+        $artifact['covered_shot_ids'] = @($ShotId)
+    }
+    return $artifact
 }
 
 function New-Bundle(
@@ -41,6 +46,11 @@ function New-Bundle(
     $scope = [ordered]@{ episode_ids=@('E01'); scene_ids=@(); shot_ids=$ShotIds; beat_ids=@() }
     $authorizationId = $null
     $authorizations = @()
+    $requirements = [ordered]@{
+        quality_bar=@('九列齐备')
+        project_constraints=[ordered]@{ aspect_ratio='9:16'; model='seedance-2.0'; visual_style_lock='LIVE_ACTION_REALISM' }
+        focus=@('邻镜流畅')
+    }
     $producerTargets = @{ P1='script-plot-progression'; P2='storyboard-table-director'; P3='storyboard-image-prompt-director'; P4='storyboard-image-generation'; P6='video-prompt-director' }
     if ($Action -in @('CALL_PRODUCER','CALL_QA','ROUTE_REPAIR')) {
         $authorizationId = "FLOW-AUTH-PRJ001-$Stage-0001"
@@ -51,7 +61,7 @@ function New-Bundle(
         $authorizationTicket = if ($Action -eq 'ROUTE_REPAIR') { $TicketId } else { $null }
         $authorizations = @([ordered]@{
             authorization_id=$authorizationId; project_id='PRJ-001'; stage=$Stage; action=$authorizationAction; target=$authorizationTarget
-            status=$authorizationStatus; scope=$scope; artifact_full_id=$authorizationArtifact; ticket_id=$authorizationTicket; issued_at='2026-08-16T00:00:00+08:00'
+            status=$authorizationStatus; scope=$scope; requirements=$requirements; artifact_full_id=$authorizationArtifact; ticket_id=$authorizationTicket; issued_at='2026-08-16T00:00:00+08:00'
         })
         if ($Action -eq 'CALL_QA') {
             foreach ($item in @($Artifacts | Where-Object { $_.full_id -eq $ArtifactFullId })) { $item.flow_authorization_id = $authorizationId }
@@ -60,7 +70,7 @@ function New-Bundle(
     return [ordered]@{
         schema_version='1.0'
         project_manifest=[ordered]@{
-            project_id='PRJ-001'; manifest_version='V1'; status='ACTIVE'; episode_ids=@('E01'); required_scene_ids=@('SCENE-E01-S01')
+            project_id='PRJ-001'; manifest_version='V1'; status='ACTIVE'; episode_ids=@('E01'); required_scene_ids=@('SCENE-E01-S01'); visual_style_lock='LIVE_ACTION_REALISM'
             source_materials=@([ordered]@{ source_id='SCRIPT-E01'; source_type='SCRIPT'; version='V1'; status='CURRENT'; locator='file/episode-01.txt' })
             constraints=[ordered]@{}
         }
@@ -76,6 +86,7 @@ function New-Bundle(
         dispatch=[ordered]@{
             action=$Action; target=$Target; qa_mode=$QaMode; artifact_full_id=$ArtifactFullId; ticket_id=$TicketId; authorization_id=$authorizationId
             scope=$scope
+            requirements=$requirements
             reason='S01 validator regression test'
         }
         delivery=@()
@@ -145,7 +156,9 @@ try {
     $ticket = [ordered]@{
         ticket_id='RT-STORYBOARD-TABLE-E01-S01-001-001'; qa_mode='STORYBOARD_TABLE'; artifact_id='STORYBOARD-E01-S01'; artifact_version='V1'
         full_id='STORYBOARD-E01-S01-V1'; verdict='REPAIR'; severity='HIGH'; issue_type='CONTINUITY'; issue_ids=@('QI-001')
-        evidence='Position mismatch'; repair_instruction='Restore position'; locked_fields=@('dialogue'); return_to='storyboard-table-director'; max_attempts_remaining=1
+        evidence='Position mismatch'; repair_instruction='Restore position'; locked_fields=@('dialogue')
+        repair_type='LOCAL_REPAIR'; preserve_scope='其余镜头与锁定字段全部保留'; must_fix=@('05 镜人物世界左右恢复（依据 STORYBOARD-E01-S01-V1 前四镜站位）')
+        return_to='storyboard-table-director'; max_attempts_remaining=1
         target_shot_ids=@('SHOT-E01-S01-001'); target_fields=@('机位')
     }
     Invoke-Case 'route-repair' (New-Bundle 'P2' 'REPAIRING' 'ROUTE_REPAIR' 'storyboard-table-director' @($plot,$storyboard) $null 'STORYBOARD-E01-S01-V1' @('SHOT-E01-S01-001') @($ticket) $ticket.ticket_id) 0

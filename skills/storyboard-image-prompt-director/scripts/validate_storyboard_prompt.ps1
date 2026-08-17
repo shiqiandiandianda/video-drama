@@ -1,4 +1,4 @@
-[CmdletBinding()]
+﻿[CmdletBinding()]
 param(
     [Parameter(Mandatory = $true)]
     [string]$Path
@@ -25,7 +25,7 @@ if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) { Write-Error "Storyboar
 try { $artifact = Get-Content -Raw -Encoding UTF8 -LiteralPath $Path | ConvertFrom-Json }
 catch { Write-Error "Invalid JSON: $($_.Exception.Message)"; exit 2 }
 
-$required = @('schema_version','project_id','flow_authorization_id','scene_id','shot_id','source_beat_ids','artifact_id','artifact_version','full_id','prompt_id','source_artifact_id','source_version','source_full_id','source_status','source_stale','storyboard_row_version','source_row_full_id','source_row_status','source_row_stale','status','frame_role','selected_moment','positive_prompt','asset_requirements','asset_bindings','camera','spatial_continuity','prop_states','text_policy','locked_fields','negative_constraints','aspect_ratio','unresolved_fields','change_log')
+$required = @('schema_version','project_id','flow_authorization_id','scene_id','shot_id','source_beat_ids','artifact_id','artifact_version','full_id','prompt_id','source_artifact_id','source_version','source_full_id','source_status','source_stale','storyboard_row_version','source_row_full_id','source_row_status','source_row_stale','status','frame_role','selected_moment','visual_style_lock','style_pack_positive','style_pack_negative','reference_numbering','positive_prompt','asset_requirements','asset_bindings','camera','spatial_continuity','prop_states','text_policy','locked_fields','negative_constraints','aspect_ratio','unresolved_fields','change_log')
 foreach ($field in $required) { Require-Property $artifact $field 'root' | Out-Null }
 
 if ((Has-Property $artifact 'schema_version') -and $artifact.schema_version -ne '1.0') { $errors.Add('root.schema_version must be 1.0.') }
@@ -59,6 +59,32 @@ if (Require-Array $artifact 'source_beat_ids' 'root' $false) {
 foreach ($arrayField in @('prop_states','locked_fields','negative_constraints','unresolved_fields','change_log')) { Require-Array $artifact $arrayField 'root' $true | Out-Null }
 foreach ($field in @('phase','source_evidence','frozen_state','selection_reason')) { if (Has-Property $artifact 'selected_moment') { Require-Property $artifact.selected_moment $field 'root.selected_moment' | Out-Null } }
 if ((Has-Property $artifact 'positive_prompt') -and [string]::IsNullOrWhiteSpace([string]$artifact.positive_prompt)) { $errors.Add('root.positive_prompt must not be empty.') }
+if ((Has-Property $artifact 'visual_style_lock') -and @('LIVE_ACTION_REALISM','GUOMAN_3D_CG') -notcontains $artifact.visual_style_lock) { $errors.Add('root.visual_style_lock must be LIVE_ACTION_REALISM or GUOMAN_3D_CG.') }
+foreach ($packField in @('style_pack_positive','style_pack_negative')) {
+    if ((Has-Property $artifact $packField) -and ([string]::IsNullOrWhiteSpace([string]$artifact.$packField))) { $errors.Add("root.$packField must mirror the style pack verbatim and not be empty.") }
+}
+if ((Has-Property $artifact 'style_pack_positive') -and (Has-Property $artifact 'visual_style_lock')) {
+    $packText = [string]$artifact.style_pack_positive
+    if ($artifact.visual_style_lock -eq 'LIVE_ACTION_REALISM' -and $packText -notmatch '真人实拍') { $errors.Add('root.style_pack_positive does not match the LIVE_ACTION_REALISM pack.') }
+    if ($artifact.visual_style_lock -eq 'GUOMAN_3D_CG' -and $packText -notmatch '3D 国漫') { $errors.Add('root.style_pack_positive does not match the GUOMAN_3D_CG pack.') }
+}
+if (Require-Array $artifact 'reference_numbering' 'root' $false) {
+    $seenNos = @{}
+    $seenRefs = @{}
+    $expectedNo = 0
+    $sorted = @($artifact.reference_numbering | Sort-Object { [int]$_.image_no })
+    foreach ($entry in $sorted) {
+        foreach ($entryField in @('image_no','ref')) { if (-not (Has-Property $entry $entryField)) { $errors.Add("root.reference_numbering[].$entryField is required.") } }
+        if ((Has-Property $entry 'image_no') -and (Has-Property $entry 'ref')) {
+            $expectedNo++
+            if ([int]$entry.image_no -ne $expectedNo) { $errors.Add('root.reference_numbering image_no must be consecutive from 1.') }
+            if ($seenRefs.ContainsKey([string]$entry.ref)) { $errors.Add("root.reference_numbering duplicates ref '$($entry.ref)'.") }
+            $seenRefs[[string]$entry.ref] = $true
+            if ($seenNos.ContainsKey([int]$entry.image_no)) { $errors.Add("root.reference_numbering duplicates image_no $($entry.image_no).") }
+            $seenNos[[int]$entry.image_no] = $true
+        }
+    }
+}
 if (Has-Property $artifact 'asset_bindings') {
     foreach ($field in @('characters','scene','props')) { Require-Array $artifact.asset_bindings $field 'root.asset_bindings' $true | Out-Null }
     if (Has-Property $artifact 'asset_requirements') {

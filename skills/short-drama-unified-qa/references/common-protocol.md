@@ -18,7 +18,8 @@
 - 产物缺少 `flow_authorization_id`，或对应授权不是唯一、`CONSUMED`、与生产目标和 `artifact_full_id` 精确一致；
 - 待检产物或直接上游为 `STALE`；
 - 权威上游仍为 `DRAFT`、`CHECKING`、`REPAIR` 或 `HUMAN_GATE`；
-- `VIDEO_PROMPT` 的目标分镜图未人工 `APPROVED`，或父集合虽 `APPROVED` 但目标条目不是当前精确版本、`stale: false`；
+- `VIDEO_PROMPT`（VISUAL_TRACK）的目标分镜图未人工 `APPROVED`，或父集合虽 `APPROVED` 但目标条目不是当前精确版本、`stale: false`；`VIDEO_PROMPT`（DIRECT_TRACK）`covered_shot_ids` 任一行非当前 `STORYBOARD_TABLE: PASS`，或跨集首段缺当前 `EPISODE_HANDOFF`；
+- 当前 dispatch 未携带 S01 签发的 `requirements`（S06 裁决依据之一）；
 - `project_id`、范围 ID、稳定 ID、版本或 `source_beat_ids[]` 对不上；
 - 返修/更新没有上一完整版本或精确授权范围。
 
@@ -72,9 +73,15 @@ issue_ids: [QI-STORYBOARD-TABLE-001]
 evidence: 05 镜与权威站位和前四镜连续性相反
 repair_instruction: 仅恢复 05 镜人物世界左右与合法轴侧
 locked_fields: [场景, 镜号, 景别, 秒数/s, 原始对白, 服装, 道具, 其余镜头]
+repair_type: LOCAL_REPAIR
+preserve_scope: 其余镜头与锁定字段全部保留
+must_fix:
+  - 05 镜人物世界左右与合法轴侧恢复（依据 STORYBOARD-E01-S01-V1 前四镜站位）
 return_to: storyboard-table-director
 max_attempts_remaining: 1
 ```
+
+`repair_type`（`FULL_REDO` / `LOCAL_REPAIR` / `REINFORCE_CONSTRAINT`）、`preserve_scope`、`must_fix` 为必填；`must_fix` 逐条落到具体镜号/格号/段号并写明修正依据，优先使用 `_shared/repair-phrases.md` 登记短语，禁止"修好感觉"式写法。
 
 按模式再提供：
 
@@ -84,7 +91,9 @@ max_attempts_remaining: 1
 | `STORYBOARD_TABLE` | `target_shot_ids[]`、`target_fields[]` |
 | `STORYBOARD_PROMPT` | `target_shot_ids[]`、`allowed_paths[]` |
 | `STORYBOARD_IMAGE` | `target_shot_ids[]`、`regeneration_constraints[]` |
-| `VIDEO_PROMPT` | `affected_scope[]`、`allowed_changes[]` |
+| `VIDEO_PROMPT` | `target_segment_ids[]`、`affected_scope[]`、`allowed_changes[]` |
+
+段级选择器 `target_segment_ids[]` 与镜级选择器并存：段间/窗口矛盾根因涉及邻居段时，两侧段号都列入。
 
 保持这些不变量：
 
@@ -113,9 +122,12 @@ checked_against:
   - FLOW-AUTH-PRJ001-P2-0001
 issues: [<Issue>]
 repair_ticket: <RepairTicket、RepairTicket 数组或 null>
+grade: null
 stale_downstream: []
 checked_at: 2026-08-16T12:00:00+08:00
 ```
+
+`grade` 仅 `STORYBOARD_IMAGE` 模式必填（`S` / `A` / `B`，见 qa-storyboard-image.md 评级表）；其余模式为 `null`。
 
 `checked_against` 列出待检版本、实际参与裁决的精确权威版本和已核验的 `flow_authorization_id`。没有稳定 ID 的源剧本使用其来源 ID 和版本；不得只写类型名。
 
