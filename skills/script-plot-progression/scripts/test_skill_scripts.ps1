@@ -1,4 +1,4 @@
-[CmdletBinding()]
+﻿[CmdletBinding()]
 param()
 
 $ErrorActionPreference = "Stop"
@@ -138,6 +138,21 @@ try {
                     time = "DAY"
                     interior_exterior = "INT"
                     location = "DINING_ROOM"
+                }
+                scene_main = "住宅"
+                scene_sub = "住宅-餐厅"
+                spatial_anchors = @(
+                    [ordered]@{ kind = "FIXTURE"; name = "餐桌"; screen_position = "画面中央"; description = "长方形木桌" },
+                    [ordered]@{ kind = "CAMERA_ANCHOR"; name = "主机位"; screen_position = "餐厅门侧"; description = "朝餐桌方向拍摄" }
+                )
+                scene_tone = [ordered]@{
+                    style = "现实都市家庭"
+                    color_palette = "暖黄主调"
+                    rhythm = "克制递进"
+                }
+                light_base = [ordered]@{
+                    key_direction = "右侧窗外"
+                    color_temperature = "暖黄"
                 }
                 characters_present = @("DAUGHTER", "FATHER")
                 scene_start_state = New-State -Characters @{ "DAUGHTER" = "holds the letter"; "FATHER" = "has not seen the letter" } -Props @{ "LETTER" = "held by DAUGHTER" } -Knowledge @{ "FATHER" = "does not know the result" }

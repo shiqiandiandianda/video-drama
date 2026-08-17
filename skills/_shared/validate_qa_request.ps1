@@ -1,4 +1,4 @@
-[CmdletBinding()]
+﻿[CmdletBinding()]
 param(
     [Parameter(Mandatory = $true)]
     [string]$Path
@@ -52,6 +52,19 @@ if (Has-Property $request 'flow_control') {
                 $artifact = $request.artifact
                 foreach ($field in @('project_id','full_id','flow_authorization_id')) { if (-not (Has-Property $artifact $field) -or [string]::IsNullOrWhiteSpace([string]$artifact.$field)) { $errors.Add("root.artifact.$field is required for flow verification.") } }
                 if ((Has-Property $artifact 'flow_authorization_id') -and (Has-Property $flowControl 'production_authorization_id') -and $artifact.flow_authorization_id -ne $flowControl.production_authorization_id) { $errors.Add('root.artifact.flow_authorization_id must equal flow_control.production_authorization_id.') }
+                if ([string]$request.qa_mode -eq 'VIDEO_PROMPT') {
+                    if (-not (Has-Property $artifact 'segment_id') -or [string]$artifact.segment_id -notmatch '^SEG-E[0-9]{2,}-[0-9]{3}$') { $errors.Add('root.artifact.segment_id is required and must match SEG-E##-### for VIDEO_PROMPT.') }
+                    if (-not (Has-Property $artifact 'covered_shot_ids') -or $artifact.covered_shot_ids -isnot [System.Array]) { $errors.Add('root.artifact.covered_shot_ids must be an array for VIDEO_PROMPT.') }
+                    else {
+                        $covered = @($artifact.covered_shot_ids)
+                        if ($covered.Count -lt 2 -or $covered.Count -gt 6) { $errors.Add('root.artifact.covered_shot_ids must cover 2 to 6 shots.') }
+                        foreach ($sid in $covered) { if ([string]$sid -notmatch '^SHOT-E[0-9]{2,}-S[0-9]{2,}-[0-9]{3}$') { $errors.Add("root.artifact.covered_shot_ids contains non-canonical ID: $sid.") } }
+                        if ((Has-Property $flowState 'dispatch') -and (Has-Property $flowState.dispatch 'scope') -and $null -ne $flowState.dispatch.scope -and (Has-Property $flowState.dispatch.scope 'shot_ids')) {
+                            $scopeShots = @($flowState.dispatch.scope.shot_ids | ForEach-Object { [string]$_ })
+                            if ($scopeShots.Count -gt 0) { foreach ($sid in $covered) { if ($scopeShots -notcontains [string]$sid) { $errors.Add("covered shot $sid is outside the CALL_QA dispatch scope.") } } }
+                        }
+                    }
+                }
                 if (Has-Property $flowState 'dispatch') {
                     $dispatch = $flowState.dispatch
                     if ((-not (Has-Property $dispatch 'action')) -or $dispatch.action -ne 'CALL_QA') { $errors.Add('S06 only accepts an S01 CALL_QA dispatch.') }

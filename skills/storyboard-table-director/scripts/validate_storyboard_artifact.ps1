@@ -1,4 +1,4 @@
-[CmdletBinding()]
+﻿[CmdletBinding()]
 param(
     [Parameter(Mandatory = $true)]
     [string]$Path
@@ -92,8 +92,35 @@ $columnNames = @('scene','shot_no','shot_size','camera_position','camera_movemen
 if (Has-Property $artifact 'shot_map') {
     foreach ($row in @($artifact.shot_map)) {
         $context = "root.shot_map[$($expectedShotNo - 1)]"
-        foreach ($field in @('project_id','scene_id','shot_no','shot_id','artifact_id','artifact_version','full_id','storyboard_row_version','source_artifact_id','source_version','source_full_id','source_status','source_stale','source_beat_ids','status','columns')) {
+        foreach ($field in @('project_id','scene_id','shot_no','shot_id','artifact_id','artifact_version','full_id','storyboard_row_version','source_artifact_id','source_version','source_full_id','source_status','source_stale','source_beat_ids','status','scene_sub','spatial_anchors','screen_lock','end_state','dialogue_delivery','segment_hint','columns')) {
             Require-Property $row $field $context | Out-Null
+        }
+        if ((Has-Property $row 'scene_sub') -and ([string]::IsNullOrWhiteSpace([string]$row.scene_sub))) { $errors.Add("$context.scene_sub must be a non-empty scene subclass mirrored from S02.") }
+        if (Require-Array $row 'spatial_anchors' $context $false) {
+            if (@($row.spatial_anchors).Count -lt 2) { $errors.Add("$context.spatial_anchors must contain at least 2 anchors mirrored from S02.") }
+            foreach ($anchor in @($row.spatial_anchors)) {
+                foreach ($anchorField in @('kind','name','screen_position','description')) { Require-Property $anchor $anchorField "$context.spatial_anchors" | Out-Null }
+                if ((Has-Property $anchor 'kind') -and @('FIXTURE','CAMERA_ANCHOR') -notcontains $anchor.kind) { $errors.Add("$context.spatial_anchors kind must be FIXTURE or CAMERA_ANCHOR.") }
+            }
+        }
+        if (Has-Property $row 'screen_lock') {
+            if (Require-Array $row.screen_lock 'characters' "$context.screen_lock" $false) {
+                foreach ($locked in @($row.screen_lock.characters)) {
+                    foreach ($lockField in @('name','screen_side','vertical')) { Require-Property $locked $lockField "$context.screen_lock.characters" | Out-Null }
+                    if ((Has-Property $locked 'screen_side') -and @('LEFT','RIGHT','CENTER') -notcontains $locked.screen_side) { $errors.Add("$context.screen_lock screen_side must be LEFT, RIGHT or CENTER.") }
+                    if ((Has-Property $locked 'vertical') -and @('HIGH','LOW','EYE_LEVEL') -notcontains $locked.vertical) { $errors.Add("$context.screen_lock vertical must be HIGH, LOW or EYE_LEVEL.") }
+                }
+            }
+            Require-Property $row.screen_lock 'main_axis' "$context.screen_lock" | Out-Null
+            Require-Property $row.screen_lock 'two_shot_same_direction' "$context.screen_lock" | Out-Null
+        }
+        if (Has-Property $row 'end_state') {
+            foreach ($endField in @('characters','props','camera','action_stop')) { Require-Property $row.end_state $endField "$context.end_state" | Out-Null }
+        }
+        if (Require-Array $row 'dialogue_delivery' $context $true) {
+            foreach ($delivery in @($row.dialogue_delivery)) {
+                foreach ($deliveryField in @('speaker','text_source','pause_before_keywords','pause_seconds','stress_keywords','primary_gesture','after_hold_s')) { Require-Property $delivery $deliveryField "$context.dialogue_delivery" | Out-Null }
+            }
         }
         if ((Has-Property $row 'project_id') -and $row.project_id -ne $artifact.project_id) { $errors.Add("$context.project_id must match root.project_id.") }
         if ((Has-Property $row 'scene_id') -and $row.scene_id -ne $artifact.scene_id) { $errors.Add("$context.scene_id must match root.scene_id.") }
@@ -129,6 +156,7 @@ if (Has-Property $artifact 'shot_map') {
             if (Has-Property $row.columns 'duration_s') {
                 $duration = 0.0
                 if (-not [double]::TryParse([string]$row.columns.duration_s, [Globalization.NumberStyles]::Float, [Globalization.CultureInfo]::InvariantCulture, [ref]$duration) -or $duration -le 0) { $errors.Add("$context.columns.duration_s must be greater than zero.") }
+                elseif ($duration -lt 1.5) { $errors.Add("$context.columns.duration_s must be at least 1.5 seconds (short-drama rhythm floor).") }
             }
         }
         $expectedShotNo++

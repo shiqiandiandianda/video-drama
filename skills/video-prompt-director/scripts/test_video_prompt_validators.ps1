@@ -1,4 +1,4 @@
-[CmdletBinding()]
+﻿[CmdletBinding()]
 param()
 
 $ErrorActionPreference = 'Stop'
@@ -34,11 +34,12 @@ function Invoke-Expected([string]$Name, [string]$ScriptPath, [string[]]$Argument
 
 try {
     $secondsUnit = [char]0x79D2
+    $emDash = [char]0x2014
     $body20 = @(
         'References: HEROINE{{Mixed 1}}, LIVING_ROOM{{Mixed 2}}.'
         ''
-        "0-5${secondsUnit}: HEROINE walks to the table and settles."
-        "5-15${secondsUnit}: She looks at the letter and settles her breath and gaze."
+        "【镜头1｜0${emDash}5${secondsUnit}】HEROINE walks to the table and settles."
+        "【镜头2｜5${emDash}15${secondsUnit}】She looks at the letter and settles her breath and gaze."
     ) -join "`n"
     $body20Path = Write-Text 'body-20.txt' $body20
     Invoke-Expected 'Seedance 2.0 accepts Mixed slots and exactly 15 seconds' $bodyValidator @('-BodyPath',$body20Path,'-MaxChars','0','-ExpectedDurationSeconds','15') 0
@@ -46,19 +47,19 @@ try {
     $body25 = @(
         'References: HEROINE{{Mixed 1}}, PURSUER{{Mixed 2}}, RAINY_ALLEY{{Mixed 3}}.'
         ''
-        "0-10${secondsUnit}: HEROINE runs through the alley while PURSUER holds distance."
-        "10-30${secondsUnit}: Their motion and breath continue to a stable corner landing."
+        "【镜头1｜0${emDash}10${secondsUnit}】HEROINE runs through the alley while PURSUER holds distance."
+        "【镜头2｜10${emDash}30${secondsUnit}】Their motion and breath continue to a stable corner landing."
     ) -join "`n"
     $body25Path = Write-Text 'body-25.txt' $body25
     Invoke-Expected 'Seedance 2.5 accepts Mixed slots and exactly 30 seconds' $bodyValidator @('-BodyPath',$body25Path,'-MaxChars','5000','-ExpectedDurationSeconds','30') 0
 
-    $noSlotPath = Write-Text 'body-no-slot.txt' "References: HEROINE.`n`n0-15${secondsUnit}: HEROINE maintains natural motion."
+    $noSlotPath = Write-Text 'body-no-slot.txt' "References: HEROINE.`n`n【镜头1｜0${emDash}15${secondsUnit}】HEROINE maintains natural motion."
     Invoke-Expected 'Body without a Mixed slot is rejected' $bodyValidator @('-BodyPath',$noSlotPath,'-ExpectedDurationSeconds','15') 1
 
-    $slotGapPath = Write-Text 'body-slot-gap.txt' "References: HEROINE{{Mixed 1}}, LIVING_ROOM{{Mixed 3}}.`n`n0-15${secondsUnit}: HEROINE maintains natural motion."
+    $slotGapPath = Write-Text 'body-slot-gap.txt' "References: HEROINE{{Mixed 1}}, LIVING_ROOM{{Mixed 3}}.`n`n【镜头1｜0${emDash}15${secondsUnit}】HEROINE maintains natural motion."
     Invoke-Expected 'Body with a Mixed slot gap is rejected' $bodyValidator @('-BodyPath',$slotGapPath,'-ExpectedDurationSeconds','15') 1
 
-    $wrongDurationPath = Write-Text 'body-wrong-duration.txt' "References: HEROINE{{Mixed 1}}.`n`n0-14${secondsUnit}: HEROINE maintains natural motion."
+    $wrongDurationPath = Write-Text 'body-wrong-duration.txt' "References: HEROINE{{Mixed 1}}.`n`n【镜头1｜0${emDash}14${secondsUnit}】HEROINE maintains natural motion."
     Invoke-Expected 'Seedance 2.0 body ending before 15 seconds is rejected' $bodyValidator @('-BodyPath',$wrongDurationPath,'-ExpectedDurationSeconds','15') 1
 
     $handoff = [ordered]@{
@@ -72,19 +73,21 @@ try {
     $checkedFields = @('CHARACTERS','PROPS','SPATIAL_WORLD','CAMERA','LIGHTING','SOUND')
     $sequence = [ordered]@{ artifacts=@(
         [ordered]@{
-            shot_id='SHOT-E01-S01-001'; start_state=[ordered]@{ state_id='SS-E01-S01-001-V1' }; end_state=[ordered]@{ state_id='PE-E01-S01-001-V1' }
+            segment_id='SEG-E01-001'; start_state=[ordered]@{ state_id='SS-E01-001-V1' }; final_state=[ordered]@{ state_id='PE-E01-001-V1' }
             continuity_checks=[ordered]@{
-                sequence_index=1
-                incoming=[ordered]@{ status='BOUNDARY'; neighbor_shot_id=$null; compared_state_ids=@(); checked_fields=@(); mismatches=@(); handoff_signature=$handoff; boundary_reason='PROJECT_START' }
-                outgoing=[ordered]@{ status='PASS'; neighbor_shot_id='SHOT-E01-S01-002'; compared_state_ids=@('PE-E01-S01-001-V1','SS-E01-S01-002-V1'); checked_fields=$checkedFields; mismatches=@(); handoff_signature=$handoff; boundary_reason=$null }
+                window=2
+                incoming=[ordered]@{ status='BOUNDARY'; neighbor_segment_id=$null; compared_state_ids=@(); checked_fields=@(); mismatches=@(); handoff_signature=$handoff; boundary_reason='PROJECT_START' }
+                outgoing=[ordered]@{ status='PASS'; neighbor_segment_id='SEG-E01-002'; compared_state_ids=@('PE-E01-001-V1','SS-E01-002-V1'); checked_fields=$checkedFields; mismatches=@(); handoff_signature=$handoff; boundary_reason=$null }
+                window_checks=@()
             }
         },
         [ordered]@{
-            shot_id='SHOT-E01-S01-002'; start_state=[ordered]@{ state_id='SS-E01-S01-002-V1' }; end_state=[ordered]@{ state_id='PE-E01-S01-002-V1' }
+            segment_id='SEG-E01-002'; start_state=[ordered]@{ state_id='SS-E01-002-V1' }; final_state=[ordered]@{ state_id='PE-E01-002-V1' }
             continuity_checks=[ordered]@{
-                sequence_index=2
-                incoming=[ordered]@{ status='PASS'; neighbor_shot_id='SHOT-E01-S01-001'; compared_state_ids=@('PE-E01-S01-001-V1','SS-E01-S01-002-V1'); checked_fields=$checkedFields; mismatches=@(); handoff_signature=$handoff; boundary_reason=$null }
-                outgoing=[ordered]@{ status='BOUNDARY'; neighbor_shot_id=$null; compared_state_ids=@(); checked_fields=@(); mismatches=@(); handoff_signature=$handoff; boundary_reason='PROJECT_END' }
+                window=2
+                incoming=[ordered]@{ status='PASS'; neighbor_segment_id='SEG-E01-001'; compared_state_ids=@('PE-E01-001-V1','SS-E01-002-V1'); checked_fields=$checkedFields; mismatches=@(); handoff_signature=$handoff; boundary_reason=$null }
+                outgoing=[ordered]@{ status='BOUNDARY'; neighbor_segment_id=$null; compared_state_ids=@(); checked_fields=@(); mismatches=@(); handoff_signature=$handoff; boundary_reason='PROJECT_END' }
+                window_checks=@()
             }
         }
     ) }

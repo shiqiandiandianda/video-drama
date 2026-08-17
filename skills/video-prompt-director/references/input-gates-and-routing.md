@@ -13,12 +13,13 @@
 
 ## 1. 输入包
 
-S05 的正式输入至少包含：
+S05 的正式输入至少包含（段级）：
 
 ```yaml
 project_id: PRJ-001
 scene_id: SCENE-E01-S01
-shot_id: SHOT-E01-S01-003
+segment_id: SEG-E01-002
+covered_shot_ids: [SHOT-E01-S01-003, SHOT-E01-S01-004, SHOT-E01-S01-005]
 task_mode: CREATE                # CREATE | REPAIR | UPDATE
 
 target:
@@ -30,9 +31,10 @@ target:
   product_flow: <当前产品模式>
   generation_task: MULTIMODAL_REFERENCE
   aspect_ratio: "9:16"
-  duration_seconds: 15            # 2.0 固定 15；2.5 固定 30
+  duration_seconds: 15            # 段时长：2.0 固定 15；2.5 固定 30
   delivery_mode: PROMPT_ONLY
 
+# —— 仅 VISUAL_TRACK；DIRECT_TRACK 整体省略 ——
 approved_storyboard_set:
   artifact_id: APPROVED-STORYBOARD-E01
   artifact_version: V1
@@ -61,15 +63,15 @@ plot_progression:
   source_beat_ids:
     - BEAT-E01-S01-002
 
-storyboard_row:
-  parent_full_id: STORYBOARD-E01-S01-V2
-  scene_id: SCENE-E01-S01
-  shot_id: SHOT-E01-S01-003
-  source_beat_ids: [BEAT-E01-S01-002]
-  storyboard_row_version: V2
-  row_full_id: SHOT-E01-S01-003-V2
-  status: PASS
-  stale: false
+storyboard_rows:                 # 段内每镜一行，全部 PASS
+  - parent_full_id: STORYBOARD-E01-S01-V2
+    scene_id: SCENE-E01-S01
+    shot_id: SHOT-E01-S01-003
+    source_beat_ids: [BEAT-E01-S01-002]
+    storyboard_row_version: V2
+    row_full_id: SHOT-E01-S01-003-V2
+    status: PASS
+    stale: false
 
 dialogue_source:
   source_id: SCRIPT-E01-V1
@@ -81,14 +83,14 @@ asset_ledger:
   version: null                    # 可选；未提供时由 S05 自动规划槽位
   bindings: []
 
-previous_end_state:
-  state_id: PE-E01-S01-002-V1
+previous_end_state:              # 上一段 final_state；跨集首段为 EpisodeHandoff
+  state_id: PE-E01-001-V1        # 跨集首段：HANDOFF-E00-V1
   state_kind: PLANNED
-  source_status: LOCKED_UPSTREAM
+  source_status: LOCKED_UPSTREAM_PLUS_PREVIOUS_END_STATE   # 跨集首段：EPISODE_HANDOFF
   fields: {}
 
 next_start_state:
-  state_id: SS-E01-S01-004-V1
+  state_id: SS-E01-003-V1
   source_status: LOCKED_UPSTREAM
   fields: {}                       # 末段则改为明确边界
 
@@ -98,34 +100,35 @@ repair_ticket: null
 change_set: null
 ```
 
-输入可以采用 YAML、JSON 或宿主系统对象，但字段语义必须稳定。不得仅提供“用上一版”“按确认图”而缺少精确 ID 和版本。
+输入可以采用 YAML、JSON 或宿主系统对象，但字段语义必须稳定。不得仅提供"用上一版""按确认图"而缺少精确 ID 和版本。
 
-## 2. 状态门禁
+## 2. 状态门禁（双轨）
 
 正式生产需同时满足：
 
 | 输入 | 必需状态 | 其他要求 |
 |---|---|---|
-| `ApprovedStoryboardSet` 当前图片条目 | `APPROVED` | 父集合与条目均已批准；精确版本、可读取、非 `STALE`、范围等于当前 `shot_id` |
-| 剧情演进 | `PASS` | 包含当前 `beat_id`、非 `STALE` |
-| 分镜表行 | `PASS` | 唯一映射当前 `shot_id`、非 `STALE` |
+| `ApprovedStoryboardSet` 段内各镜图片条目（**仅 VISUAL_TRACK**） | `APPROVED` | 父集合与条目均已批准；精确版本、可读取、非 `STALE`、范围覆盖 `covered_shot_ids` |
+| 剧情演进 | `PASS` | 包含段内全部 `beat_id`、非 `STALE` |
+| 分镜表行 | `PASS` | `covered_shot_ids` 每镜一行、非 `STALE`；DIRECT_TRACK 下这是唯一画面依据 |
 | 原始对白 | 可定位 | 有对白时逐字文本、说话人和范围明确；无对白明确写 `NO_DIALOGUE` |
 | 资产台账 | 可选 | 有台账时验证来源；无台账时 S05 根据剧情与分镜自动规划人物、场景、关键道具等 Mixed 槽位 |
 | 模型规则 | `VERIFIED` | 模型、产品模式和任务类型在支持范围内 |
-| 相邻镜状态 | 有来源标签 | 首尾明确边界；中间镜同时提供上一镜尾与下一镜起点，未知字段不得补猜 |
+| 相邻段状态 | 有来源标签 | 首尾明确边界；中间段同时提供上一段尾与下一段起点，未知字段不得补猜；跨集首段必须提供上集 `EpisodeHandoff` |
 
-`ApprovedStoryboardSet.status: APPROVED` 不能只写在父集合上；当前图片条目必须带自己的 `full_id`、`source_beat_ids`、来源分镜 Prompt 版本和批准记录。
+VISUAL_TRACK 下 `ApprovedStoryboardSet.status: APPROVED` 不能只写在父集合上；段内各镜图片条目必须带自己的 `full_id`、`source_beat_ids`、来源分镜 Prompt 版本和批准记录。
 
 以下任一情况禁止输出可投喂 `body`：
 
-- 图片是 `DRAFT`、`PASS`、`HUMAN_GATE`、`STALE` 或仅“看起来确认过”。
-- 图片、剧情或分镜表的 `shot_id` 不一致。
+- （VISUAL_TRACK）图片是 `DRAFT`、`PASS`、`HUMAN_GATE`、`STALE` 或仅"看起来确认过"。
+- 图片（如有）、剧情或分镜表的 `shot_id` 与 `covered_shot_ids` 不一致。
 - 模型规则只写模型名，没有已验证规则版本。
 - 原始对白缺字、说话人不明或两份锁定来源互斥。
 - 已提供资产之间身份/版本互斥，或无法判断某个必要槽位对应哪个剧情对象。
 - 当前动作必须改变已确认构图、镜头数或时长才可执行。
+- 段内任一镜头的十五节 schema 字段无上游出处（缺字段即阻断，禁止编造）。
 
-“用户没有上传资产”不属于阻断项。S05 必须建立 `AUTO_PLANNED` 绑定并从 `{{Mixed 1}}` 连续自增；自动槽位是待上传输入计划，不冒充已存在资产。
+"用户没有上传资产"不属于阻断项。S05 必须建立 `AUTO_PLANNED` 绑定并从 `{{Mixed 1}}` 连续自增；自动槽位是待上传输入计划，不冒充已存在资产。
 
 ## 3. 来源优先级
 
@@ -183,16 +186,15 @@ change_set: null
 
 编辑、延长和组合任务仍不能绕过当前镜头的上游批准与模型能力门禁。没有实际源视频时不得使用延长句式。
 
-## 6. 单镜头范围
+## 6. 段范围
 
-`VideoPromptSpec.shot_id` 为单数，因此 V1 采用硬规则：
+schema 2.0 起 `VideoPromptSpec` 为段级产物：
 
-- 一份规格只对应一行 PASS 分镜表、一个 APPROVED 图片版本和一个 `shot_id`。
-- 时间轴可以分成若干连续区间，但不能新增切镜；主运镜继承该分镜行。
-- 批量交付只是多个完整规格的有序集合，不是一个 body。
+- 一份规格对应一个 `segment_id`、2–6 行连续 PASS 分镜表行（`covered_shot_ids`），VISUAL_TRACK 下还对应各镜 APPROVED 图片版本。
+- 段内镜头时间轴由分镜行秒数累加得到，不得新增或删除切镜；各镜运镜继承对应分镜行。
+- 段分组依据连续 `shot_ids` 与段时长上限（15/30 秒），优先采用 S03 `segment_hint` 建议边界；与图轨审片排版单位"页"无关。
+- 批量交付只是多个完整段规格的有序集合，不是一个 body。
 - 整集/整场未拆镜时返回 S01/S03，不在 S05 输出分段制作清单。
-
-若未来产品决定“一 Prompt 对多个镜头”，必须先升级 schema；不得在 V1 里偷偷加入 `shot_ids`。
 
 ## 7. 阻断与返回路由
 

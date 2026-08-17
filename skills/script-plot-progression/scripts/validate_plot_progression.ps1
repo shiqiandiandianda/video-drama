@@ -1,4 +1,4 @@
-[CmdletBinding()]
+﻿[CmdletBinding()]
 param(
     [Parameter(Mandatory = $true)]
     [string]$Path
@@ -295,7 +295,7 @@ if ((Test-HasProperty $artifact "status") -and $allowedStatuses -notcontains $ar
 if (Require-ArrayProperty $artifact "source_artifacts" "root") {
     $sourceIds = New-Object 'System.Collections.Generic.HashSet[string]'
     $primarySourceMatches = 0
-    $allowedSourceTypes = @("SCRIPT", "CONFIRMED_DECISION", "CHARACTER_RELATION", "SCENE_FACT", "ASSET_CONSTRAINT", "TRANSCRIPT")
+    $allowedSourceTypes = @("SCRIPT", "CONFIRMED_DECISION", "CHARACTER_RELATION", "SCENE_FACT", "ASSET_CONSTRAINT", "TRANSCRIPT", "EPISODE_HANDOFF")
     foreach ($source in @($artifact.source_artifacts)) {
         $context = "root.source_artifacts"
         foreach ($field in @("source_id", "source_type", "version", "scope", "locator_type")) {
@@ -336,8 +336,51 @@ if (Require-ArrayProperty $artifact "scenes" "root") {
     for ($sceneIndex = 0; $sceneIndex -lt $scenes.Count; $sceneIndex++) {
         $scene = $scenes[$sceneIndex]
         $sceneContext = "root.scenes[$sceneIndex]"
-        foreach ($field in @("scene_id", "scene_number", "source_ranges", "heading", "characters_present", "scene_start_state", "beats", "scene_end_state")) {
+        foreach ($field in @("scene_id", "scene_number", "source_ranges", "heading", "scene_main", "scene_sub", "spatial_anchors", "scene_tone", "light_base", "characters_present", "scene_start_state", "beats", "scene_end_state")) {
             Require-Property $scene $field $sceneContext | Out-Null
+        }
+
+        if (Require-StringProperty $scene "scene_main" $sceneContext) { }
+        if (Require-StringProperty $scene "scene_sub" $sceneContext) {
+            $bareSceneWords = @("室内", "室外", "院内", "院子", "外面", "家里", "山上", "树林里")
+            if ($bareSceneWords -contains $scene.scene_sub) {
+                Add-ValidationError "$sceneContext.scene_sub must be a specific subclass, not a bare generic word like '$($scene.scene_sub)'."
+            }
+        }
+
+        if (Require-ArrayProperty $scene "spatial_anchors" $sceneContext) {
+            $anchors = @($scene.spatial_anchors)
+            if ($anchors.Count -lt 2) {
+                Add-ValidationError "$sceneContext.spatial_anchors must contain at least 2 anchors."
+            }
+            $cameraAnchorCount = 0
+            for ($anchorIndex = 0; $anchorIndex -lt $anchors.Count; $anchorIndex++) {
+                $anchor = $anchors[$anchorIndex]
+                $anchorContext = "$sceneContext.spatial_anchors[$anchorIndex]"
+                foreach ($anchorField in @("kind", "name", "screen_position", "description")) {
+                    Require-StringProperty $anchor $anchorField $anchorContext | Out-Null
+                }
+                if ((Test-HasProperty $anchor "kind") -and @("FIXTURE", "CAMERA_ANCHOR") -notcontains $anchor.kind) {
+                    Add-ValidationError "$anchorContext.kind must be FIXTURE or CAMERA_ANCHOR."
+                }
+                if ((Test-HasProperty $anchor "kind") -and $anchor.kind -eq "CAMERA_ANCHOR") {
+                    $cameraAnchorCount++
+                }
+            }
+            if ($cameraAnchorCount -gt 1) {
+                Add-ValidationError "$sceneContext.spatial_anchors may contain at most one CAMERA_ANCHOR."
+            }
+        }
+
+        if (Test-HasProperty $scene "scene_tone") {
+            foreach ($toneField in @("style", "color_palette", "rhythm")) {
+                Require-StringProperty $scene.scene_tone $toneField "$sceneContext.scene_tone" | Out-Null
+            }
+        }
+        if (Test-HasProperty $scene "light_base") {
+            foreach ($lightField in @("key_direction", "color_temperature")) {
+                Require-StringProperty $scene.light_base $lightField "$sceneContext.light_base" | Out-Null
+            }
         }
 
         if (Require-StringProperty $scene "scene_id" $sceneContext) {

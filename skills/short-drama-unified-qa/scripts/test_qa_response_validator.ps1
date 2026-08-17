@@ -1,4 +1,4 @@
-[CmdletBinding()]
+﻿[CmdletBinding()]
 param()
 
 $ErrorActionPreference = 'Stop'
@@ -55,6 +55,7 @@ $base = [ordered]@{
     checked_against = @('STORYBOARD-E01-S01-V1','PLOT-E01-V1','FLOW-AUTH-PRJ001-P2-0001')
     issues = @()
     repair_ticket = $null
+    grade = $null
     stale_downstream = @()
     checked_at = '2026-08-16T12:00:00+08:00'
 }
@@ -82,6 +83,9 @@ try {
         target_shot_ids = @('SHOT-E01-S01-005')
         target_fields = @('camera_position','visual_description','director_notes')
         locked_fields = @('scene','shot_number','shot_size','duration','dialogue','other_shots')
+        repair_type = 'LOCAL_REPAIR'
+        preserve_scope = '其余镜头与锁定字段全部保留'
+        must_fix = @('SHOT-E01-S01-005 人物世界左右与合法轴侧恢复（依据 STORYBOARD-E01-S01-V1 前四镜站位）')
         return_to = 'storyboard-table-director'
         max_attempts_remaining = 1
     }
@@ -134,6 +138,7 @@ try {
     $imageRepair.repair_ticket.issue_ids = @('QI-STORYBOARD-IMAGE-001')
     $imageRepair.repair_ticket.return_to = 'storyboard-image-generation'
     $imageRepair.repair_ticket | Add-Member -NotePropertyName regeneration_constraints -NotePropertyValue @('Keep Character A world-left of Character B')
+    $imageRepair.grade = 'B'
     Run-Case 'valid-storyboard-image-repair' $imageRepair 0
 
     $videoRepair = $repair | ConvertTo-Json -Depth 30 | ConvertFrom-Json
@@ -149,6 +154,7 @@ try {
     $videoRepair.repair_ticket.full_id = 'VP-E01-S01-005-V1'
     $videoRepair.repair_ticket.issue_ids = @('QI-VIDEO-PROMPT-001')
     $videoRepair.repair_ticket.return_to = 'video-prompt-director'
+    $videoRepair.repair_ticket | Add-Member -NotePropertyName target_segment_ids -NotePropertyValue @('SEG-E01-005')
     $videoRepair.repair_ticket | Add-Member -NotePropertyName affected_scope -NotePropertyValue @('SHOT-E01-S01-005')
     $videoRepair.repair_ticket | Add-Member -NotePropertyName allowed_changes -NotePropertyValue @('/start_state/characters')
     Run-Case 'valid-video-prompt-repair' $videoRepair 0

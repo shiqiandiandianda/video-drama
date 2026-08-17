@@ -1,0 +1,4 @@
+interface:
+  display_name: "短剧分镜生产"
+  short_description: "生成固定35列母表、分镜图提示词、验图返修及视频提示词"
+  default_prompt: "Use $produce-short-drama-storyboards to turn my short-drama material into the correct storyboard-stage deliverable."

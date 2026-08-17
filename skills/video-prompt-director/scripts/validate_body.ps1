@@ -1,4 +1,4 @@
-param(
+﻿param(
     [Parameter(Mandatory = $true)]
     [string]$BodyPath,
 
@@ -54,7 +54,7 @@ $forbiddenPatterns = [ordered]@{
     'IMAGE_SLOT_FORBIDDEN' = '\{\{\s*Image\b'
     'MARKDOWN_FENCE_FORBIDDEN' = '```'
     'END_FREEZE_FORBIDDEN' = '(?i)END\s+FREEZE'
-    'OS_LABEL_FORBIDDEN' = '(?m)(?:^|[\s\u3010\[])OS(?:[\s\u3011\]:\uFF1A]|$)'
+    'OS_LABEL_FORBIDDEN' = '(?m)^\s*OS\s*[:：]'
     'NEXT_STEP_TALK_FORBIDDEN' = '\u4E0B\u4E00\u6B65\u6211\u53EF\u4EE5'
     'MARKETING_LABEL_FORBIDDEN' = '\u4F4E\u5D29\u574F\u4F18\u5316\u7248|\u5DE5\u4E1A\u6267\u884C\u7248'
 }
@@ -87,9 +87,9 @@ else {
     }
 }
 
-$timelinePattern = '(?m)^\s*(\d+(?:\.\d+)?)\s*(?:-|\u2013|\u2014|\u81F3|\u5230)\s*(\d+(?:\.\d+)?)\s*\u79D2\s*[\uFF1A:]'
+$timelinePattern = '【镜头([0-9]+)｜([0-9]+(?:\.[0-9]+)?)—([0-9]+(?:\.[0-9]+)?)秒】'
 $timelineMatches = [regex]::Matches($body, $timelinePattern)
-$zeroTimelineCount = @($timelineMatches | Where-Object { [double]::Parse($_.Groups[1].Value, [Globalization.CultureInfo]::InvariantCulture) -eq 0 }).Count
+$zeroTimelineCount = @($timelineMatches | Where-Object { [double]::Parse($_.Groups[2].Value, [Globalization.CultureInfo]::InvariantCulture) -eq 0 }).Count
 if ($zeroTimelineCount -gt 1) {
     $issues.Add("MULTIPLE_ZERO_TIMELINES: $zeroTimelineCount")
 }
@@ -99,8 +99,8 @@ if ($timelineMatches.Count -eq 0) {
 else {
     $expectedStart = 0.0
     foreach ($timelineMatch in $timelineMatches) {
-        $segmentStart = [double]::Parse($timelineMatch.Groups[1].Value, [Globalization.CultureInfo]::InvariantCulture)
-        $segmentEnd = [double]::Parse($timelineMatch.Groups[2].Value, [Globalization.CultureInfo]::InvariantCulture)
+        $segmentStart = [double]::Parse($timelineMatch.Groups[2].Value, [Globalization.CultureInfo]::InvariantCulture)
+        $segmentEnd = [double]::Parse($timelineMatch.Groups[3].Value, [Globalization.CultureInfo]::InvariantCulture)
         if ($segmentStart -ne $expectedStart) { $issues.Add("TIMELINE_GAP_OR_OVERLAP: expected $expectedStart, found $segmentStart") }
         if ($segmentEnd -le $segmentStart) { $issues.Add("TIMELINE_SEGMENT_INVALID: $segmentStart-$segmentEnd") }
         $expectedStart = $segmentEnd

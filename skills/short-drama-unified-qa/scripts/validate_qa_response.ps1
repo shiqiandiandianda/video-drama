@@ -1,4 +1,4 @@
-[CmdletBinding()]
+﻿[CmdletBinding()]
 param(
     [Parameter(Mandatory = $true)]
     [string]$Path
@@ -106,7 +106,7 @@ function Validate-Ticket(
     [System.Collections.Generic.HashSet[string]]$TicketedIssueIds
 ) {
     $context = "root.repair_ticket[$Index]"
-    foreach ($field in @('ticket_id','qa_mode','artifact_id','artifact_version','full_id','verdict','severity','issue_type','issue_ids','evidence','repair_instruction','locked_fields','return_to','max_attempts_remaining')) {
+    foreach ($field in @('ticket_id','qa_mode','artifact_id','artifact_version','full_id','verdict','severity','issue_type','issue_ids','evidence','repair_instruction','locked_fields','repair_type','preserve_scope','must_fix','return_to','max_attempts_remaining')) {
         Require-Property $Ticket $field $context | Out-Null
     }
 
@@ -138,6 +138,16 @@ function Validate-Ticket(
     }
     if ((Has-Property $Ticket 'severity') -and @('CRITICAL','HIGH','MEDIUM','LOW') -notcontains $Ticket.severity) {
         $script:errors.Add("$context.severity is invalid.")
+    }
+    if ((Has-Property $Ticket 'repair_type') -and @('FULL_REDO','LOCAL_REPAIR','REINFORCE_CONSTRAINT') -notcontains $Ticket.repair_type) {
+        $script:errors.Add("$context.repair_type must be FULL_REDO, LOCAL_REPAIR, or REINFORCE_CONSTRAINT.")
+    }
+    Require-NonEmptyString $Ticket 'preserve_scope' $context | Out-Null
+    Require-Array $Ticket 'must_fix' $context $false | Out-Null
+    if (Has-Property $Ticket 'target_segment_ids') {
+        foreach ($segId in @($Ticket.target_segment_ids)) {
+            if ([string]$segId -notmatch '^SEG-E[0-9]{2,}-[0-9]{3}$') { $script:errors.Add("$context.target_segment_ids contains non-canonical ID: $segId.") }
+        }
     }
     if (Require-Array $Ticket 'issue_ids' $context $false) {
         foreach ($issueId in @($Ticket.issue_ids)) {
@@ -182,6 +192,7 @@ function Validate-Ticket(
             Require-Array $Ticket 'regeneration_constraints' $context $false | Out-Null
         }
         'VIDEO_PROMPT' {
+            Require-Array $Ticket 'target_segment_ids' $context $false | Out-Null
             Require-Array $Ticket 'affected_scope' $context $false | Out-Null
             Require-Array $Ticket 'allowed_changes' $context $false | Out-Null
         }
@@ -201,7 +212,7 @@ catch {
     exit 2
 }
 
-foreach ($field in @('schema_version','qa_mode','artifact_id','artifact_version','full_id','flow_authorization_id','verdict','checked_against','issues','repair_ticket','stale_downstream','checked_at')) {
+foreach ($field in @('schema_version','qa_mode','artifact_id','artifact_version','full_id','flow_authorization_id','verdict','checked_against','issues','repair_ticket','grade','stale_downstream','checked_at')) {
     Require-Property $root $field 'root' | Out-Null
 }
 
@@ -226,6 +237,12 @@ if ((Has-Property $root 'qa_mode') -and $modes -notcontains $root.qa_mode) {
 }
 if ((Has-Property $root 'verdict') -and @('PASS','REPAIR','HUMAN_GATE') -notcontains $root.verdict) {
     $errors.Add('root.verdict is invalid.')
+}
+if (Has-Property $root 'grade') {
+    if ((Has-Property $root 'qa_mode') -and $root.qa_mode -eq 'STORYBOARD_IMAGE') {
+        if ($null -eq $root.grade -or @('S','A','B') -notcontains $root.grade) { $errors.Add('root.grade must be S, A, or B for STORYBOARD_IMAGE.') }
+    }
+    elseif ($null -ne $root.grade) { $errors.Add('root.grade must be null outside STORYBOARD_IMAGE.') }
 }
 if ((Has-Property $root 'artifact_id') -and [string]$root.artifact_id -match '-V[0-9]+$') {
     $errors.Add('root.artifact_id must be a stable ID without a version suffix.')

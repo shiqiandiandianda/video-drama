@@ -44,6 +44,16 @@ selected_moment:
   frozen_state: "女主右手刚将通知书平放到父亲面前，指腹尚未离开纸面。"
   selection_reason: "通知书归属、动作结果与父女反应关系同时可见。"
 
+visual_style_lock: LIVE_ACTION_REALISM   # 镜像 ProjectManifest，必填
+style_pack_positive: <镜像 _shared/style-packs.md 本项目风格锁正词包全文>
+style_pack_negative: <镜像 _shared/style-packs.md 本项目风格锁负词包全文>
+
+reference_numbering:                     # 固定编号：角色→场景→道具，各类内按名称排序，从 1 连续
+  - {image_no: 1, ref: 女主}
+  - {image_no: 2, ref: 父亲}
+  - {image_no: 3, ref: 客厅}
+  - {image_no: 4, ref: 录取通知书}
+
 positive_prompt: >-
   <一条完整、可直接提交生图模型的静态画面提示词>
 
@@ -155,6 +165,8 @@ change_log: []
 - `unresolved_fields` 非空且涉及身份、位置、关键道具、画幅或风格时，不得交付可投喂 Prompt。
 - `negative_constraints` 使用数组，每项只描述一种可见失败。
 - 默认 `text_policy.mode: FORBIDDEN`。源分镜明确要求画面文字时改为 `EXACT_SOURCE_TEXT`，并逐字填写。
+- `visual_style_lock` 必填且与 ProjectManifest 一致；`style_pack_positive` 必须逐字镜像 `_shared/style-packs.md` 对应风格正词包，`style_pack_negative` 逐字镜像负词包并整体并入 `negative_constraints`；两词包互斥，出现对方风格锁词汇即不合格。
+- `reference_numbering` 全项目固定：先角色、再场景、再道具，各类内按名称排序，从 1 连续编号；同一对象在全项目所有规格中编号不变。正文引用参考图时必须写作"图1是女主"式声明，禁止"参考图""上图"等无编号指代。
 
 ## 4. Positive Prompt 顺序
 
@@ -162,7 +174,8 @@ change_log: []
 
 ```text
 单张静态任务与画幅
-→ 项目风格、真实度、时代和时间
+→ 参考图固定编号声明（"图1是女主，图2是父亲，图3是客厅，图4是录取通知书"）
+→ 项目风格锁正词包（逐字镜像）、真实度、时代和时间
 → 场景结构与锚点
 → 景别、机位、镜头高度、构图、焦点和景深
 → 逐人物身份、位置、朝向、视线、重心和双手
@@ -172,7 +185,7 @@ change_log: []
 → 色彩、材质、空气与连续性
 ```
 
-Prompt 自身必须自包含，不能只写“同上一镜”“按参考图”“保持连续”。资产引用与连续性要在正文中转译成可见事实。
+Prompt 自身必须自包含，不能只写“同上一镜”“按参考图”“保持连续”。资产引用与连续性要在正文中转译成可见事实；参考图只用 `reference_numbering` 的固定编号指代。
 
 ## 5. 批量交付
 
@@ -187,6 +200,8 @@ SHOT-E01-S01-002 / SP-E01-S01-002-V1
 ```
 
 不得把多个镜头合并成一条 Prompt，也不得让模型直接生成带镜号的多格接触表。单张图审核通过后，拼版工具才能把图片放入 16 格或其他模板；模板编号不是画面内容。
+
+**分镜页 Prompt（评审专用）**：为人工导演整页评审，可用 `scripts/render_page_prompt.ps1` 把同页 2–10 个已 `PASS` 的 `StoryboardPromptSpec` 机械拼装成一条多格页 Prompt：版式固定 2 列 5 行，格号与镜号一一对应；三种模式 `COLOR`（彩色完成稿）、`LINEART_REVIEW`（线稿评审稿，灰阶线稿 + 运镜箭头 + 人物/道具标签）、`LINEART_CLEAN`（净线稿）。页 Prompt 只能由渲染器生成，手工编写或改写即不合格；单镜 `StoryboardPromptSpec` 仍是唯一事实主源，页 Prompt 不引入任何单镜规格之外的事实。
 
 ## 6. QA 交接
 

@@ -1,4 +1,4 @@
-[CmdletBinding()]
+﻿[CmdletBinding()]
 param(
     [Parameter(Mandatory = $true)]
     [string]$Path
@@ -68,11 +68,36 @@ function Get-ArtifactEpisodeId($Artifact) {
     }
     return $null
 }
+function Test-DirectTrackP6Gate($Scope) {
+    $tables = @(Get-UsableArtifacts 'STORYBOARD_TABLE' 'PASS')
+    if ($tables.Count -eq 0) { return $false }
+    $sceneIds = @(Scope-Values $Scope 'scene_ids')
+    $shotIds = @(Scope-Values $Scope 'shot_ids')
+    $derived = @($shotIds | ForEach-Object { if ([string]$_ -match '^SHOT-(E[0-9]{2,}-S[0-9]{2,})-[0-9]{3}$') { "SCENE-$($Matches[1])" } })
+    $sceneIds = @($sceneIds + $derived | Sort-Object -Unique)
+    if ($sceneIds.Count -eq 0) { return $true }
+    foreach ($sceneId in $sceneIds) {
+        if (@($tables | Where-Object { (Has-Property $_ 'scene_id') -and $_.scene_id -eq $sceneId }).Count -eq 0) { return $false }
+    }
+    return $true
+}
 function Has-GateForStage([string]$Stage, $Scope) {
     switch ($Stage) {
         'P1' {
             $scripts = @($script:sources | Where-Object { $_.source_type -eq 'SCRIPT' -and $_.status -eq 'CURRENT' })
-            return $scripts.Count -gt 0 -and -not $script:hasConflict
+            if ($scripts.Count -eq 0 -or $script:hasConflict) { return $false }
+            $episodeIds = @(Scope-Values $Scope 'episode_ids')
+            if ($episodeIds.Count -eq 0) { $episodeIds = @($script:manifestEpisodeIds) }
+            $handoffs = @($script:artifacts | Where-Object { $_.artifact_type -eq 'EPISODE_HANDOFF' -and $_.status -in @('PASS','APPROVED') -and (Is-CurrentUsable $_) })
+            foreach ($episodeId in $episodeIds) {
+                $idx = [Array]::IndexOf($script:manifestEpisodeIds, $episodeId)
+                if ($idx -gt 0) {
+                    $prevId = $script:manifestEpisodeIds[$idx - 1]
+                    if (@($handoffs | Where-Object { $_.artifact_id -eq "HANDOFF-$prevId" }).Count -eq 0) { return $false }
+                }
+                elseif ($idx -lt 0 -and $handoffs.Count -eq 0) { return $false }
+            }
+            return $true
         }
         'P2' {
             $plots = @(Get-UsableArtifacts 'PLOT' 'PASS')
@@ -111,6 +136,8 @@ function Has-GateForStage([string]$Stage, $Scope) {
             return $true
         }
         'P6' {
+            if ($script:imageTrack -eq 'DISABLED') { return (Test-DirectTrackP6Gate $Scope) }
+            if ($script:imageTrack -eq 'OPTIONAL' -and (Test-DirectTrackP6Gate $Scope)) { return $true }
             $sets = @(Get-UsableArtifacts 'APPROVED_STORYBOARD_SET' 'APPROVED')
             if ($sets.Count -eq 0) { return $false }
             $images = @(Get-UsableArtifacts 'STORYBOARD_IMAGE' 'PASS')
@@ -133,7 +160,11 @@ function Has-GateForStage([string]$Stage, $Scope) {
             $shotIds = @(Scope-Values $Scope 'shot_ids')
             if ($shotIds.Count -eq 0) { return $prompts.Count -gt 0 }
             foreach ($shotId in $shotIds) {
-                if (@($prompts | Where-Object { (Has-Property $_ 'shot_id') -and $_.shot_id -eq $shotId }).Count -eq 0) { return $false }
+                $hits = @($prompts | Where-Object {
+                    ((Has-Property $_ 'shot_id') -and $_.shot_id -eq $shotId) -or
+                    ((Has-Property $_ 'covered_shot_ids') -and @($_.covered_shot_ids) -contains $shotId)
+                })
+                if ($hits.Count -eq 0) { return $false }
             }
             return $true
         }
@@ -177,6 +208,9 @@ $script:sources = @($manifest.source_materials)
 $script:artifacts = @($bundle.artifact_index)
 $script:authorizations = @($bundle.flow_authorizations)
 $script:hasConflict = $false
+$script:manifestEpisodeIds = @($manifest.episode_ids)
+$script:imageTrack = 'OPTIONAL'
+if ((Has-Property $manifest 'constraints') -and (Has-Property $manifest.constraints 'storyboard_image_track') -and $null -ne $manifest.constraints.storyboard_image_track) { $script:imageTrack = [string]$manifest.constraints.storyboard_image_track }
 
 Require-String $manifest 'project_id' '$.project_manifest' | Out-Null
 Require-String $manifest 'manifest_version' '$.project_manifest' | Out-Null
@@ -185,6 +219,9 @@ foreach ($name in @('episode_ids','required_scene_ids','source_materials')) { Re
 Require-Property $manifest 'constraints' '$.project_manifest' | Out-Null
 if ((Has-Property $manifest 'manifest_version') -and $manifest.manifest_version -notmatch '^V[1-9][0-9]*$') { Add-Error '$.project_manifest.manifest_version must match V<n>.' }
 if ((Has-Property $manifest 'status') -and $manifest.status -notin @('ACTIVE','ON_HOLD','COMPLETE')) { Add-Error '$.project_manifest.status is invalid.' }
+if ((Has-Property $manifest 'visual_style_lock') -and $manifest.visual_style_lock -notin @('LIVE_ACTION_REALISM','GUOMAN_3D_CG')) { Add-Error '$.project_manifest.visual_style_lock must be LIVE_ACTION_REALISM or GUOMAN_3D_CG.' }
+if (-not (Has-Property $manifest 'visual_style_lock')) { Add-Error '$.project_manifest.visual_style_lock is required (HUMAN_GATE 补锁，不得默认猜测).' }
+if ((Has-Property $manifest 'constraints') -and (Has-Property $manifest.constraints 'storyboard_image_track') -and $manifest.constraints.storyboard_image_track -notin @('REQUIRED','OPTIONAL','DISABLED')) { Add-Error '$.project_manifest.constraints.storyboard_image_track is invalid.' }
 
 $sourceCurrentCounts = @{}
 for ($i = 0; $i -lt $script:sources.Count; $i++) {
@@ -215,6 +252,7 @@ if ((Has-Property $stage 'state') -and $stage.state -notin @('READY','WAITING_PR
 if ((Has-Property $stage 'last_qa_verdict') -and $null -ne $stage.last_qa_verdict -and $stage.last_qa_verdict -notin @('PASS','REPAIR','HUMAN_GATE')) { Add-Error '$.stage_state.last_qa_verdict is invalid.' }
 if ((Has-Property $stage 'state') -and $stage.state -eq 'BLOCKED' -and @($stage.blocking_reasons).Count -eq 0) { Add-Error 'BLOCKED state requires blocking_reasons.' }
 if ((Has-Property $stage 'state') -and $stage.state -eq 'COMPLETE' -and $stage.current_stage -ne 'P7') { Add-Error 'Only P7 may be COMPLETE.' }
+if ($script:imageTrack -eq 'DISABLED' -and (Has-Property $stage 'current_stage') -and $stage.current_stage -in @('P3','P4','P5')) { Add-Error 'DIRECT_TRACK (storyboard_image_track=DISABLED) may not enter P3/P4/P5.' }
 
 if ((Has-Property $manifest 'project_id') -and (Has-Property $stage 'project_id') -and $manifest.project_id -ne $stage.project_id) { Add-Error 'project_manifest.project_id and stage_state.project_id must match.' }
 
@@ -232,7 +270,7 @@ for ($i = 0; $i -lt $decisions.Count; $i++) {
     }
 }
 
-$artifactTypes = @('PLOT','STORYBOARD_TABLE','STORYBOARD_PROMPT','STORYBOARD_IMAGE','APPROVED_STORYBOARD_SET','VIDEO_PROMPT','DELIVERY_PACKAGE')
+$artifactTypes = @('PLOT','STORYBOARD_TABLE','STORYBOARD_PROMPT','STORYBOARD_IMAGE','APPROVED_STORYBOARD_SET','VIDEO_PROMPT','EPISODE_HANDOFF','DELIVERY_PACKAGE')
 $artifactStatuses = @('DRAFT','CHECKING','REPAIR','PASS','HUMAN_GATE','APPROVED','STALE')
 $currentIds = @{}
 for ($i = 0; $i -lt $script:artifacts.Count; $i++) {
@@ -256,6 +294,15 @@ for ($i = 0; $i -lt $script:artifacts.Count; $i++) {
     if ((Has-Property $artifact 'status') -and (Has-Property $artifact 'stale') -and (($artifact.status -eq 'STALE') -ne ($artifact.stale -eq $true))) { Add-Error "$artifactPath.status STALE and stale=true must be set together." }
     if ((Has-Property $artifact 'scene_id') -and $null -ne $artifact.scene_id -and $artifact.scene_id -notmatch '^SCENE-E[0-9]{2,}-S[0-9]{2,}$') { Add-Error "$artifactPath.scene_id is not canonical." }
     if ((Has-Property $artifact 'shot_id') -and $null -ne $artifact.shot_id -and $artifact.shot_id -notmatch '^SHOT-E[0-9]{2,}-S[0-9]{2,}-[0-9]{3}$') { Add-Error "$artifactPath.shot_id is not canonical." }
+    if ((Has-Property $artifact 'segment_id') -and $null -ne $artifact.segment_id -and $artifact.segment_id -notmatch '^SEG-E[0-9]{2,}-[0-9]{3}$') { Add-Error "$artifactPath.segment_id is not canonical." }
+    if ((Has-Property $artifact 'artifact_type') -and $artifact.artifact_type -eq 'VIDEO_PROMPT') {
+        if (Require-Array $artifact 'covered_shot_ids' $artifactPath) {
+            foreach ($coveredId in @($artifact.covered_shot_ids)) {
+                if ([string]$coveredId -notmatch '^SHOT-E[0-9]{2,}-S[0-9]{2,}-[0-9]{3}$') { Add-Error "$artifactPath.covered_shot_ids contains non-canonical ID: $coveredId." }
+            }
+        }
+    }
+    if ((Has-Property $artifact 'artifact_type') -and $artifact.artifact_type -eq 'EPISODE_HANDOFF' -and (Has-Property $artifact 'artifact_id') -and $artifact.artifact_id -notmatch '^HANDOFF-E[0-9]{2,}$') { Add-Error "$artifactPath.artifact_id must match HANDOFF-E## for EPISODE_HANDOFF." }
     foreach ($beatId in @($artifact.source_beat_ids)) {
         if ($beatId -notmatch '^BEAT-E[0-9]{2,4}-S[0-9]{2,4}-[0-9]{3,4}$') { Add-Error "$artifactPath.source_beat_ids contains non-canonical ID: $beatId." }
     }
@@ -299,6 +346,18 @@ for ($i = 0; $i -lt $script:authorizations.Count; $i++) {
     if ((Has-Property $authorization 'scope') -and $null -ne $authorization.scope) {
         foreach ($name in @('episode_ids','scene_ids','shot_ids','beat_ids')) { Require-Array $authorization.scope $name "$authorizationPath.scope" | Out-Null }
     }
+    if (Require-Property $authorization 'requirements' $authorizationPath) {
+        if ($null -ne $authorization.requirements) {
+            $req = $authorization.requirements
+            if ($req -is [System.Array] -or $req -is [string]) { Add-Error "$authorizationPath.requirements must be an object." }
+            else {
+                if ((Has-Property $req 'quality_bar') -and $req.quality_bar -isnot [System.Array]) { Add-Error "$authorizationPath.requirements.quality_bar must be an array." }
+                if ((Has-Property $req 'focus') -and $req.focus -isnot [System.Array]) { Add-Error "$authorizationPath.requirements.focus must be an array." }
+                if ((Has-Property $req 'project_constraints') -and ($req.project_constraints -is [System.Array] -or $req.project_constraints -is [string])) { Add-Error "$authorizationPath.requirements.project_constraints must be an object." }
+            }
+        }
+        elseif ((Has-Property $authorization 'status') -and $authorization.status -in @('ISSUED','CONSUMED')) { Add-Error "$authorizationPath.requirements is required for ISSUED/CONSUMED authorizations." }
+    }
     if ((Has-Property $authorization 'status') -and $authorization.status -eq 'ISSUED' -and (Has-Property $authorization 'artifact_full_id') -and $null -ne $authorization.artifact_full_id) { Add-Error "$authorizationPath.artifact_full_id must be null while status is ISSUED." }
     if ((Has-Property $authorization 'status') -and $authorization.status -eq 'CONSUMED' -and ((-not (Has-Property $authorization 'artifact_full_id')) -or [string]::IsNullOrWhiteSpace([string]$authorization.artifact_full_id))) { Add-Error "$authorizationPath.artifact_full_id is required while status is CONSUMED." }
 }
@@ -327,6 +386,17 @@ Require-Property $dispatch 'ticket_id' '$.dispatch' | Out-Null
 Require-Property $dispatch 'authorization_id' '$.dispatch' | Out-Null
 Require-Property $dispatch 'scope' '$.dispatch' | Out-Null
 Require-Property $dispatch 'reason' '$.dispatch' | Out-Null
+if (Require-Property $dispatch 'requirements' '$.dispatch') {
+    if ($null -ne $dispatch.requirements) {
+        $dispatchReq = $dispatch.requirements
+        if ($dispatchReq -is [System.Array] -or $dispatchReq -is [string]) { Add-Error '$.dispatch.requirements must be an object.' }
+        else {
+            if ((Has-Property $dispatchReq 'quality_bar') -and $dispatchReq.quality_bar -isnot [System.Array]) { Add-Error '$.dispatch.requirements.quality_bar must be an array.' }
+            if ((Has-Property $dispatchReq 'focus') -and $dispatchReq.focus -isnot [System.Array]) { Add-Error '$.dispatch.requirements.focus must be an array.' }
+            if ((Has-Property $dispatchReq 'project_constraints') -and ($dispatchReq.project_constraints -is [System.Array] -or $dispatchReq.project_constraints -is [string])) { Add-Error '$.dispatch.requirements.project_constraints must be an object.' }
+        }
+    }
+}
 $actions = @('CALL_PRODUCER','CALL_QA','ROUTE_REPAIR','REQUEST_HUMAN_APPROVAL','MARK_STALE','DELIVER','BLOCK','NONE')
 if ((Has-Property $dispatch 'action') -and $dispatch.action -notin $actions) { Add-Error '$.dispatch.action is invalid.' }
 if ((Has-Property $stage 'next_action') -and (Has-Property $dispatch 'action') -and $stage.next_action -ne $dispatch.action) { Add-Error 'stage_state.next_action must equal dispatch.action.' }
@@ -352,6 +422,7 @@ if ((Has-Property $dispatch 'action') -and $dispatch.action -eq 'CALL_PRODUCER')
     if (-not $producerTargets.ContainsKey($stage.current_stage)) { Add-Error "No producer may be called at $($stage.current_stage)." }
     elseif ($dispatch.target -ne $producerTargets[$stage.current_stage]) { Add-Error "CALL_PRODUCER target must be $($producerTargets[$stage.current_stage]) at $($stage.current_stage)." }
     if (-not (Has-GateForStage $stage.current_stage $dispatch.scope)) { Add-Error "The authoritative upstream gate for $($stage.current_stage) is not satisfied." }
+    if (-not (Has-Property $dispatch 'requirements') -or $null -eq $dispatch.requirements) { Add-Error 'CALL_PRODUCER requires dispatch.requirements.' }
     if ([string]::IsNullOrWhiteSpace([string]$dispatch.authorization_id)) { Add-Error 'CALL_PRODUCER requires authorization_id.' }
     else {
         $matches = @($script:authorizations | Where-Object { $_.authorization_id -eq $dispatch.authorization_id })
@@ -359,6 +430,7 @@ if ((Has-Property $dispatch 'action') -and $dispatch.action -eq 'CALL_PRODUCER')
         else {
             $auth = $matches[0]
             if ($auth.project_id -ne $manifest.project_id -or $auth.stage -ne $stage.current_stage -or $auth.action -ne 'CALL_PRODUCER' -or $auth.target -ne $dispatch.target -or $auth.status -ne 'ISSUED' -or (Get-ScopeKey $auth.scope) -ne (Get-ScopeKey $dispatch.scope)) { Add-Error 'CALL_PRODUCER authorization must be ISSUED and exactly match project, stage, action, target, and scope.' }
+            if ((Has-Property $dispatch 'requirements') -and (Has-Property $auth 'requirements') -and $null -ne $dispatch.requirements -and $null -ne $auth.requirements -and (ConvertTo-Json $auth.requirements -Depth 10 -Compress) -ne (ConvertTo-Json $dispatch.requirements -Depth 10 -Compress)) { Add-Error 'CALL_PRODUCER dispatch.requirements must equal the issued authorization requirements.' }
         }
     }
 }
@@ -374,6 +446,7 @@ elseif ((Has-Property $dispatch 'action') -and $dispatch.action -eq 'CALL_QA') {
             if ($matches.Count -ne 1) { Add-Error 'CALL_QA artifact must be the unique current, non-stale DRAFT/CHECKING artifact of the stage type.' }
         }
         if (-not (Has-GateForStage $stage.current_stage $dispatch.scope)) { Add-Error "The QA upstream gate for $($stage.current_stage) is not satisfied." }
+        if (-not (Has-Property $dispatch 'requirements') -or $null -eq $dispatch.requirements) { Add-Error 'CALL_QA requires dispatch.requirements (S06 ruling basis).' }
         if ([string]::IsNullOrWhiteSpace([string]$dispatch.authorization_id)) { Add-Error 'CALL_QA requires the consumed production authorization_id.' }
         else {
             $authorizations = @($script:authorizations | Where-Object { $_.authorization_id -eq $dispatch.authorization_id })
@@ -404,6 +477,14 @@ elseif ((Has-Property $dispatch 'action') -and $dispatch.action -eq 'ROUTE_REPAI
             if ($ticket.full_id -ne $stage.current_artifact_full_id) { Add-Error 'RepairTicket.full_id must equal stage_state.current_artifact_full_id.' }
             if ([int]$ticket.max_attempts_remaining -lt 1) { Add-Error 'RepairTicket.max_attempts_remaining must be at least 1.' }
             if (@($ticket.locked_fields).Count -eq 0) { Add-Error 'RepairTicket.locked_fields must be non-empty.' }
+            if (-not (Has-Property $ticket 'repair_type') -or $ticket.repair_type -notin @('FULL_REDO','LOCAL_REPAIR','REINFORCE_CONSTRAINT')) { Add-Error 'RepairTicket.repair_type must be FULL_REDO, LOCAL_REPAIR, or REINFORCE_CONSTRAINT.' }
+            if (-not (Has-Property $ticket 'must_fix') -or @($ticket.must_fix).Count -eq 0) { Add-Error 'RepairTicket.must_fix must be a non-empty array.' }
+            if (Has-Property $ticket 'target_segment_ids') {
+                foreach ($segId in @($ticket.target_segment_ids)) {
+                    if ([string]$segId -notmatch '^SEG-E[0-9]{2,}-[0-9]{3}$') { Add-Error "RepairTicket.target_segment_ids contains non-canonical ID: $segId." }
+                }
+            }
+            if (-not (Has-Property $dispatch 'requirements') -or $null -eq $dispatch.requirements) { Add-Error 'ROUTE_REPAIR requires dispatch.requirements.' }
             if ([string]::IsNullOrWhiteSpace([string]$dispatch.authorization_id)) { Add-Error 'ROUTE_REPAIR requires authorization_id.' }
             else {
                 $matches = @($script:authorizations | Where-Object { $_.authorization_id -eq $dispatch.authorization_id })
